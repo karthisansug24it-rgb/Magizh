@@ -73,12 +73,13 @@ class _HomePageState extends State<HomePage> {
   final List<String> categories = ["All", "Puff", "Samosa", "Roll", "Drinks", "Other"];
   String selectedCategory = "All";
   int _nextProductId = 7;
+  final Map<int, int> _tapCounts = {};
 
   final List<Map<String, dynamic>> products = [
     {
       "id": 1,
       "name": "Chicken Puff",
-      "price": 1,
+      "price": 20,
       "category": "Puff",
       "image": "assets/images/chicken puff.jpeg",
       "isLocalImage": false,
@@ -86,7 +87,7 @@ class _HomePageState extends State<HomePage> {
     {
       "id": 2,
       "name": "Egg Puff",
-      "price": 1,
+      "price": 20,
       "category": "Puff",
       "image": "assets/images/egg puff.png",
       "isLocalImage": false,
@@ -94,7 +95,7 @@ class _HomePageState extends State<HomePage> {
     {
       "id": 3,
       "name": "Samosa",
-      "price": 1,
+      "price": 20,
       "category": "Samosa",
       "image": "assets/images/samosa.jpeg",
       "isLocalImage": false,
@@ -102,7 +103,7 @@ class _HomePageState extends State<HomePage> {
     {
       "id": 4,
       "name": "Veg Puff",
-      "price": 1,
+      "price": 20,
       "category": "Puff",
       "image": "assets/images/veg puff.jpeg",
       "isLocalImage": false,
@@ -110,7 +111,7 @@ class _HomePageState extends State<HomePage> {
     {
       "id": 5,
       "name": "Paneer Puff",
-      "price": 1,
+      "price": 20,
       "category": "Puff",
       "image": "assets/images/paneer puff.jpeg",
       "isLocalImage": false,
@@ -118,7 +119,7 @@ class _HomePageState extends State<HomePage> {
     {
       "id": 6,
       "name": "Mushroom Puff",
-      "price": 1,
+      "price": 20,
       "category": "Puff",
       "image": "assets/images/mushroom puff.jpeg",
       "isLocalImage": false,
@@ -143,22 +144,45 @@ class _HomePageState extends State<HomePage> {
               children: [
                 _buildHeader(),
                 _buildSearchBar(),
-                _buildAdminQuickAction(),
                 _buildCategories(),
                 Expanded(child: _buildProductGrid(filteredProducts)),
               ],
             ),
-            _buildBottomNav(),
+            _buildBottomNav(context),
           ],
         ),
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _openAdminAddProductSheet,
-        backgroundColor: const Color(0xFF8B0000),
-        foregroundColor: Colors.white,
-        icon: const Icon(Icons.admin_panel_settings),
-        label: const Text("Admin"),
+      floatingActionButton: Padding(
+        padding: const EdgeInsets.only(bottom: 110),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (_tapCounts.isNotEmpty) ...[
+              FloatingActionButton(
+                heroTag: "cancelFab",
+                onPressed: () {
+                  SoundManager.instance.playClickSound();
+                  setState(() {
+                    _tapCounts.clear();
+                  });
+                },
+                backgroundColor: Colors.white,
+                foregroundColor: const Color(0xFF8B0000),
+                child: const Icon(Icons.close, size: 24),
+              ),
+              const SizedBox(height: 12),
+            ],
+            FloatingActionButton(
+              heroTag: "addFab",
+              onPressed: _openAdminAddProductSheet,
+              backgroundColor: const Color(0xFF8B0000),
+              foregroundColor: Colors.white,
+              child: const Icon(Icons.add, size: 28),
+            ),
+          ],
+        ),
       ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
     );
   }
 
@@ -166,7 +190,7 @@ class _HomePageState extends State<HomePage> {
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 10),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        mainAxisAlignment: MainAxisAlignment.start,
         children: [
           Text(
             "Magizh",
@@ -178,42 +202,6 @@ class _HomePageState extends State<HomePage> {
               height: 1.0,
             ),
           ),
-          Row(
-            children: [
-              Container(
-                width: 40,
-                height: 40,
-                decoration: const BoxDecoration(
-                  color: Colors.white,
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(Icons.receipt_long, color: Colors.black87),
-              ),
-              const SizedBox(width: 10),
-              Container(
-                width: 40,
-                height: 40,
-                decoration: const BoxDecoration(
-                  color: Colors.white,
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(Icons.notifications_none, color: Colors.black87),
-              ),
-              const SizedBox(width: 10),
-              GestureDetector(
-                onTap: _openAdminAddProductSheet,
-                child: Container(
-                  width: 40,
-                  height: 40,
-                  decoration: const BoxDecoration(
-                    color: Color(0xFF8B0000),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(Icons.admin_panel_settings, color: Colors.white, size: 20),
-                ),
-              ),
-            ],
-          )
         ],
       ),
     );
@@ -257,7 +245,7 @@ class _HomePageState extends State<HomePage> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text(
-                      "Admin: Add Product",
+                      "Add Product",
                       style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
                     ),
                     const SizedBox(height: 16),
@@ -353,14 +341,16 @@ class _HomePageState extends State<HomePage> {
                           }
 
                           setState(() {
+                            final newId = _nextProductId++;
                             products.add({
-                              "id": _nextProductId++,
+                              "id": newId,
                               "name": name,
                               "price": price,
                               "category": category,
                               "image": selectedImage!.path,
                               "isLocalImage": true,
                             });
+                            _tapCounts[newId] = 0;
                           });
 
                           Navigator.pop(context);
@@ -397,26 +387,6 @@ class _HomePageState extends State<HomePage> {
             border: InputBorder.none,
             contentPadding: EdgeInsets.symmetric(vertical: 15),
           ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildAdminQuickAction() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
-      child: SizedBox(
-        width: double.infinity,
-        child: ElevatedButton.icon(
-          onPressed: _openAdminAddProductSheet,
-          style: ElevatedButton.styleFrom(
-            backgroundColor: const Color(0xFF8B0000),
-            foregroundColor: Colors.white,
-            padding: const EdgeInsets.symmetric(vertical: 12),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-          ),
-          icon: const Icon(Icons.admin_panel_settings),
-          label: const Text("ADMIN: Add product"),
         ),
       ),
     );
@@ -463,7 +433,7 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Widget _buildProductGrid(List<Map<String, dynamic>> products) {
+  Widget _buildProductGrid(List<Map<String, dynamic>> filteredProducts) {
     return GridView.builder(
       padding: const EdgeInsets.fromLTRB(20, 10, 20, 100),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
@@ -472,13 +442,20 @@ class _HomePageState extends State<HomePage> {
         crossAxisSpacing: 15,
         mainAxisSpacing: 15,
       ),
-      itemCount: products.length,
+      itemCount: filteredProducts.length,
       itemBuilder: (context, index) {
-        final product = products[index];
+        final product = filteredProducts[index];
+        final productId = product["id"] as int;
+        final count = _tapCounts[productId] ?? 0;
+        final isSelected = count > 0;
         return Container(
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: isSelected ? const Color(0xFF8B0000) : Colors.transparent,
+              width: 1.6,
+            ),
             boxShadow: [
               BoxShadow(
                 color: Colors.grey.withOpacity(0.05),
@@ -495,6 +472,11 @@ class _HomePageState extends State<HomePage> {
                 child: GestureDetector(
                   onTap: () {
                     SoundManager.instance.playClickSound();
+                    setState(() {
+                      final currentCount = _tapCounts[productId] ?? 0;
+                      final nextCount = currentCount + 1;
+                      _tapCounts[productId] = nextCount >= 100 ? 0 : nextCount;
+                    });
                   },
                   child: Stack(
                     fit: StackFit.expand,
@@ -529,22 +511,52 @@ class _HomePageState extends State<HomePage> {
                                 ),
                               ),
                       ),
-                      Positioned(
-                        top: 8,
-                        right: 8,
-                        child: Container(
-                          padding: const EdgeInsets.all(4),
-                          decoration: const BoxDecoration(
-                            color: Colors.white,
-                            shape: BoxShape.circle,
+                        if (isSelected)
+                          Positioned(
+                            top: 8,
+                            left: 8,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF8B0000),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Text(
+                                "x$count",
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ),
                           ),
-                          child: const Icon(
-                            Icons.favorite_border,
-                            size: 16,
-                            color: Colors.grey,
+                        if (isSelected)
+                          Positioned(
+                            top: 8,
+                            right: 8,
+                            child: GestureDetector(
+                              onTap: () {
+                                SoundManager.instance.playClickSound();
+                                setState(() {
+                                  _tapCounts.remove(productId);
+                                });
+                              },
+                              child: Container(
+                                width: 26,
+                                height: 26,
+                                decoration: const BoxDecoration(
+                                  color: Colors.white,
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Icon(
+                                  Icons.close,
+                                  size: 16,
+                                  color: Colors.black87,
+                                ),
+                              ),
+                            ),
                           ),
-                        ),
-                      ),
                     ],
                   ),
                 ),
@@ -571,18 +583,6 @@ class _HomePageState extends State<HomePage> {
                       color: Color(0xFF8B0000),
                     ),
                   ),
-                  Container(
-                    padding: const EdgeInsets.all(4),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF8B0000),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: const Icon(
-                      Icons.add,
-                      color: Colors.white,
-                      size: 18,
-                    ),
-                  ),
                 ],
               )
             ],
@@ -592,13 +592,27 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Widget _buildBottomNav() {
+  Widget _buildBottomNav(BuildContext context) {
+    final bottomInset = MediaQuery.of(context).padding.bottom;
+    final selectedCount = _tapCounts.values.fold<int>(0, (sum, count) => sum + count);
+    final total = _tapCounts.entries.fold<double>(
+      0,
+      (sum, entry) {
+        final match = products.firstWhere(
+          (p) => p["id"] == entry.key,
+          orElse: () => {},
+        );
+        final price = match["price"] is num ? (match["price"] as num).toDouble() : 0.0;
+        return sum + (price * entry.value);
+      },
+    );
+
     return Positioned(
-      bottom: 20,
+      bottom: 12 + bottomInset,
       left: 20,
       right: 20,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 5),
+        padding: const EdgeInsets.fromLTRB(8, 10, 8, 8),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(40),
@@ -610,13 +624,46 @@ class _HomePageState extends State<HomePage> {
             ),
           ],
         ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            _buildNavItem(Icons.home, "Home", true),
-            _buildNavItem(Icons.shopping_basket_outlined, "Basket", false),
-            _buildNavItem(Icons.favorite_border, "Favorites", false),
-            _buildNavItem(Icons.person_outline, "Profile", false),
+            if (selectedCount > 0)
+              Container(
+                margin: const EdgeInsets.fromLTRB(8, 0, 8, 10),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF8B0000),
+                  borderRadius: BorderRadius.circular(18),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      "Selected: $selectedCount",
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    Text(
+                      "Amount: ₹${total.toStringAsFixed(0)}",
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                _buildNavItem(Icons.home, "Home", true),
+                _buildNavItem(Icons.shopping_basket_outlined, "Basket", false),
+                _buildNavItem(Icons.favorite_border, "Favorites", false),
+                _buildNavItem(Icons.person_outline, "Profile", false),
+              ],
+            ),
           ],
         ),
       ),
