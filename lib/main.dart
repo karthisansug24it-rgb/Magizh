@@ -1,27 +1,38 @@
 import 'dart:io';
-
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-const _supabaseUrl = String.fromEnvironment('SUPABASE_URL');
-const _supabaseAnonKey = String.fromEnvironment('SUPABASE_ANON_KEY');
-
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  if (_supabaseUrl.isEmpty || _supabaseAnonKey.isEmpty) {
+  // Load .env file
+  try {
+    await dotenv.load(fileName: ".env");
+  } catch (e) {
+    debugPrint('No .env file found, relying on dart-define');
+  }
+
+  final supabaseUrl = dotenv.env['SUPABASE_URL'] ?? const String.fromEnvironment('SUPABASE_URL');
+  final supabaseAnonKey = dotenv.env['SUPABASE_ANON_KEY'] ?? const String.fromEnvironment('SUPABASE_ANON_KEY');
+
+  if (supabaseUrl.isEmpty || supabaseAnonKey.isEmpty) {
     throw StateError(
-      'Missing Supabase config. Run with --dart-define=SUPABASE_URL and --dart-define=SUPABASE_ANON_KEY',
+      'Missing Supabase config. Ensure .env file exists or run with --dart-define-from-file=env.json',
     );
   }
 
   await Supabase.initialize(
-    url: _supabaseUrl,
-    anonKey: _supabaseAnonKey,
+    url: supabaseUrl,
+    anonKey: supabaseAnonKey,
   );
+
+  // Pre-load sounds and wait for it to be ready
+  await SoundManager.instance.init();
 
   runApp(const MagizhPosApp());
 }
@@ -30,14 +41,40 @@ class SoundManager {
   SoundManager._();
 
   static final SoundManager instance = SoundManager._();
-  final AudioPlayer _player = AudioPlayer();
+  
+  // Create a pool of 10 players for overlapping sounds
+  final List<AudioPlayer> _pool = List.generate(10, (_) => AudioPlayer());
+  int _currentPlayerIndex = 0;
+  bool _isReady = false;
+
+  Future<void> init() async {
+    try {
+      for (final player in _pool) {
+        // Use standard media mode for better compatibility with modern Android asset systems
+        await player.setPlayerMode(PlayerMode.mediaPlayer);
+        await player.setSource(AssetSource('sound/tap.mp3'));
+        await player.setVolume(1.0);
+        await player.setReleaseMode(ReleaseMode.stop);
+      }
+      _isReady = true;
+      debugPrint('SoundManager: Pool initialized in Media mode');
+    } catch (e) {
+      debugPrint('SoundManager: Failed to initialize: $e');
+    }
+  }
 
   Future<void> playClickSound() async {
+    if (!_isReady) return;
     try {
-      await _player.stop();
-      await _player.play(AssetSource('sound/click.mp3.wav'));
+      final player = _pool[_currentPlayerIndex];
+      _currentPlayerIndex = (_currentPlayerIndex + 1) % _pool.length;
+      
+      // Fast restart logic
+      await player.stop();
+      await player.seek(Duration.zero);
+      await player.resume();
     } catch (e) {
-      debugPrint('Failed to play tap sound: $e');
+      debugPrint('SoundManager: Play error: $e');
     }
   }
 }
@@ -72,59 +109,35 @@ class _HomePageState extends State<HomePage> {
   final ImagePicker _imagePicker = ImagePicker();
   final List<String> categories = ["All", "Puff", "Samosa", "Roll", "Drinks", "Other"];
   String selectedCategory = "All";
-  int _nextProductId = 7;
-  final Map<int, int> _tapCounts = {};
+  final Map<dynamic, int> _tapCounts = {};
+  
+  List<Map<String, dynamic>> products = [];
+  bool _isLoading = true;
 
-  final List<Map<String, dynamic>> products = [
-    {
-      "id": 1,
-      "name": "Chicken Puff",
-      "price": 20,
-      "category": "Puff",
-      "image": "assets/images/chicken puff.jpeg",
-      "isLocalImage": false,
-    },
-    {
-      "id": 2,
-      "name": "Egg Puff",
-      "price": 20,
-      "category": "Puff",
-      "image": "assets/images/egg puff.png",
-      "isLocalImage": false,
-    },
-    {
-      "id": 3,
-      "name": "Samosa",
-      "price": 20,
-      "category": "Samosa",
-      "image": "assets/images/samosa.jpeg",
-      "isLocalImage": false,
-    },
-    {
-      "id": 4,
-      "name": "Veg Puff",
-      "price": 20,
-      "category": "Puff",
-      "image": "assets/images/veg puff.jpeg",
-      "isLocalImage": false,
-    },
-    {
-      "id": 5,
-      "name": "Paneer Puff",
-      "price": 20,
-      "category": "Puff",
-      "image": "assets/images/paneer puff.jpeg",
-      "isLocalImage": false,
-    },
-    {
-      "id": 6,
-      "name": "Mushroom Puff",
-      "price": 20,
-      "category": "Puff",
-      "image": "assets/images/mushroom puff.jpeg",
-      "isLocalImage": false,
-    },
-  ];
+  @override
+  void initState() {
+    super.initState();
+    _fetchProducts();
+  }
+
+  Future<void> _fetchProducts() async {
+    setState(() => _isLoading = true);
+    try {
+      final response = await Supabase.instance.client
+          .from('products')
+          .select()
+          .eq('is_active', true)
+          .order('name');
+      
+      setState(() {
+        products = List<Map<String, dynamic>>.from(response);
+        _isLoading = false;
+      });
+    } catch (e) {
+      debugPrint('Error fetching products: $e');
+      setState(() => _isLoading = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -145,7 +158,11 @@ class _HomePageState extends State<HomePage> {
                 _buildHeader(),
                 _buildSearchBar(),
                 _buildCategories(),
-                Expanded(child: _buildProductGrid(filteredProducts)),
+                Expanded(
+                  child: _isLoading 
+                    ? const Center(child: CircularProgressIndicator(color: Color(0xFF8B0000)))
+                    : _buildProductGrid(filteredProducts)
+                ),
               ],
             ),
             _buildBottomNav(context),
@@ -153,7 +170,7 @@ class _HomePageState extends State<HomePage> {
         ),
       ),
       floatingActionButton: Padding(
-        padding: const EdgeInsets.only(bottom: 110),
+        padding: const EdgeInsets.only(bottom: 140),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -340,19 +357,8 @@ class _HomePageState extends State<HomePage> {
                             return;
                           }
 
-                          setState(() {
-                            final newId = _nextProductId++;
-                            products.add({
-                              "id": newId,
-                              "name": name,
-                              "price": price,
-                              "category": category,
-                              "image": selectedImage!.path,
-                              "isLocalImage": true,
-                            });
-                            _tapCounts[newId] = 0;
-                          });
-
+                          // Saving to Supabase
+                          _saveProductToSupabase(name, price, category, selectedImage!.path);
                           Navigator.pop(context);
                         },
                         child: const Text("Add product"),
@@ -369,6 +375,94 @@ class _HomePageState extends State<HomePage> {
 
     nameController.dispose();
     priceController.dispose();
+  }
+
+  Future<void> _saveProductToSupabase(String name, double price, String category, String localPath) async {
+    try {
+      // 1. Upload to Supabase Storage (requires a bucket named 'product-images')
+      String? publicUrl;
+      try {
+        final fileName = '${DateTime.now().millisecondsSinceEpoch}.jpg';
+        final file = File(localPath);
+        await Supabase.instance.client.storage
+            .from('product-images')
+            .upload(fileName, file);
+        
+        publicUrl = Supabase.instance.client.storage
+            .from('product-images')
+            .getPublicUrl(fileName);
+      } catch (e) {
+        debugPrint('Storage upload failed (did you create the bucket?): $e');
+      }
+
+      // 2. Insert into Database
+      await Supabase.instance.client.from('products').insert({
+        'name': name,
+        'price': price,
+        'category': category,
+        'image_url': publicUrl, 
+        'is_active': true,
+      });
+      
+      _fetchProducts();
+    } catch (e) {
+      debugPrint('Error saving product: $e');
+    }
+  }
+
+  Widget _buildProductImage(Map<String, dynamic> product) {
+    final name = product["name"].toString().toLowerCase();
+    final imageUrl = product["image_url"] as String?;
+    
+    // 1. Check for local asset match first
+    // We try .jpeg and .png common extensions
+    final possibleAssets = [
+      'assets/images/$name.jpeg',
+      'assets/images/$name.png',
+      'assets/images/$name.jpg',
+    ];
+
+    // For now, let's try the first one that matches our list
+    // In a real app, you might want to pre-verify these
+    if (name == "chicken puff") return Image.asset('assets/images/chicken puff.jpeg', fit: BoxFit.cover);
+    if (name == "egg puff") return Image.asset('assets/images/egg puff.png', fit: BoxFit.cover);
+    if (name == "mushroom puff") return Image.asset('assets/images/mushroom puff.jpeg', fit: BoxFit.cover);
+    if (name == "paneer puff") return Image.asset('assets/images/paneer puff.jpeg', fit: BoxFit.cover);
+    if (name == "samosa") return Image.asset('assets/images/samosa.jpeg', fit: BoxFit.cover);
+    if (name == "veg puff") return Image.asset('assets/images/veg puff.jpeg', fit: BoxFit.cover);
+
+    // 2. Fallback to Network Image from Supabase
+    if (imageUrl != null && imageUrl.startsWith('http')) {
+      return Image.network(
+        imageUrl,
+        fit: BoxFit.cover,
+        loadingBuilder: (context, child, loadingProgress) {
+          if (loadingProgress == null) return child;
+          return Container(
+            color: const Color(0xFFF1F3F5),
+            child: const Center(
+              child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF8B0000)),
+            ),
+          );
+        },
+        errorBuilder: (context, error, stackTrace) => _buildPlaceholderImage(),
+      );
+    }
+
+    // 3. Last fallback
+    return _buildPlaceholderImage();
+  }
+
+  Widget _buildPlaceholderImage() {
+    return Container(
+      color: const Color(0xFFF1F3F5),
+      alignment: Alignment.center,
+      child: const Icon(
+        Icons.image_not_supported_outlined,
+        size: 30,
+        color: Color(0xFFADB5BD),
+      ),
+    );
   }
 
   Widget _buildSearchBar() {
@@ -445,9 +539,11 @@ class _HomePageState extends State<HomePage> {
       itemCount: filteredProducts.length,
       itemBuilder: (context, index) {
         final product = filteredProducts[index];
-        final productId = product["id"] as int;
+        final productId = product["id"]; // Can be int or String (UUID)
         final count = _tapCounts[productId] ?? 0;
         final isSelected = count > 0;
+        final imageUrl = product["image_url"] as String?;
+
         return Container(
           decoration: BoxDecoration(
             color: Colors.white,
@@ -483,33 +579,7 @@ class _HomePageState extends State<HomePage> {
                     children: [
                       ClipRRect(
                         borderRadius: BorderRadius.circular(15),
-                        child: (product["isLocalImage"] == true)
-                            ? Image.file(
-                                File(product["image"]),
-                                fit: BoxFit.cover,
-                                errorBuilder: (context, error, stackTrace) => Container(
-                                  color: const Color(0xFFF1F3F5),
-                                  alignment: Alignment.center,
-                                  child: const Icon(
-                                    Icons.broken_image_outlined,
-                                    size: 30,
-                                    color: Color(0xFFADB5BD),
-                                  ),
-                                ),
-                              )
-                            : Image.asset(
-                                product["image"],
-                                fit: BoxFit.cover,
-                                errorBuilder: (context, error, stackTrace) => Container(
-                                  color: const Color(0xFFF1F3F5),
-                                  alignment: Alignment.center,
-                                  child: const Icon(
-                                    Icons.image_not_supported_outlined,
-                                    size: 30,
-                                    color: Color(0xFFADB5BD),
-                                  ),
-                                ),
-                              ),
+                        child: _buildProductImage(product),
                       ),
                         if (isSelected)
                           Positioned(
@@ -576,7 +646,7 @@ class _HomePageState extends State<HomePage> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    "₹${product["price"]}",
+                    "₹${(product["price"] as num).toInt()}",
                     style: const TextStyle(
                       fontWeight: FontWeight.w900,
                       fontSize: 16,
