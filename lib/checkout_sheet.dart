@@ -1,8 +1,7 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:intl/intl.dart';
+// import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 import 'main.dart'; // Access to tapCountsProvider, productsProvider, SoundManager, Haptics
@@ -72,10 +71,10 @@ class _CheckoutSheetState extends ConsumerState<CheckoutSheet> {
     try {
       final client = Supabase.instance.client;
 
-      final now = DateTime.now();
-      final dayName = DateFormat('EEEE').format(now);
-      final dateStr = DateFormat('dd-MM-yyyy').format(now);
-      final timeStr = DateFormat('h:mma').format(now).toLowerCase();
+      // final now = DateTime.now();
+      // final dayName = DateFormat('EEEE').format(now);
+      // final dateStr = DateFormat('dd-MM-yyyy').format(now);
+      // final timeStr = DateFormat('h:mma').format(now).toLowerCase();
 
       final generatedId = const Uuid().v4();
       final payload = {
@@ -373,7 +372,7 @@ class _PaymentMethodCard extends StatelessWidget {
         duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.symmetric(vertical: 16),
         decoration: BoxDecoration(
-          color: isSelected ? AppTheme.primary.withOpacity(0.08) : Colors.white,
+          color: isSelected ? AppTheme.primary.withValues(alpha: 0.08) : Colors.white,
           border: Border.all(
             color: isSelected ? AppTheme.primary : Colors.grey.shade300,
             width: isSelected ? 2 : 1,
