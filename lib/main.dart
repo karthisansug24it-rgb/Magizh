@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:google_fonts/google_fonts.dart';
+// import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_staggered_animations/flutter_staggered_animations.dart';
@@ -276,13 +276,13 @@ class _HomePageState extends ConsumerState<HomePage> {
               Text("Magizh", style: Theme.of(context).textTheme.displayLarge),
             ],
           ),
-          GestureDetector(
+            GestureDetector(
             onTap: () {
               Haptics.medium();
               _openAdminAddProductSheet();
             },
             child: CircleAvatar(
-              backgroundColor: AppTheme.primaryLight.withOpacity(0.1),
+              backgroundColor: AppTheme.primaryLight.withValues(alpha: 0.1),
               radius: 24,
               child: const Icon(Icons.add, color: AppTheme.primary),
             ),
@@ -296,7 +296,7 @@ class _HomePageState extends ConsumerState<HomePage> {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
       child: Container(
-        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(30), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))]),
+        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(30), boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 4))]),
         child: TextField(
           controller: _searchController,
           onChanged: (value) => ref.read(searchProvider.notifier).val = value,
@@ -343,7 +343,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                     border: isSelected ? null : Border.all(color: Colors.grey.shade200),
                     boxShadow: isSelected ? [
                       BoxShadow(
-                        color: const Color(0xFF8B0000).withOpacity(0.3),
+                        color: const Color(0xFF8B0000).withValues(alpha: 0.3),
                         blurRadius: 8,
                         offset: const Offset(0, 4),
                       )
@@ -403,7 +403,7 @@ class _HomePageState extends ConsumerState<HomePage> {
       left: 20, right: 20,
       child: Container(
         padding: const EdgeInsets.fromLTRB(8, 10, 8, 8),
-        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(40), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 20, offset: const Offset(0, 10))]),
+        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(40), boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 20, offset: const Offset(0, 10))]),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -539,7 +539,7 @@ class ProductCard extends ConsumerWidget {
     final isSelected = count > 0;
 
     return Container(
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), border: Border.all(color: isSelected ? const Color(0xFF8B0000) : Colors.transparent, width: 1.6), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 10, offset: const Offset(0, 4))]),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), border: Border.all(color: isSelected ? const Color(0xFF8B0000) : Colors.transparent, width: 1.6), boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 10, offset: const Offset(0, 4))]),
       padding: const EdgeInsets.all(10),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -568,7 +568,7 @@ class ProductCard extends ConsumerWidget {
                   if (product['is_syncing'] == true)
                     Container(
                       decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.3),
+                        color: Colors.black.withValues(alpha: 0.3),
                         borderRadius: BorderRadius.circular(15),
                       ),
                       child: const Center(
@@ -691,7 +691,7 @@ class _AddProductSheetState extends State<AddProductSheet> {
             TextField(controller: _priceController, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: "Price", border: OutlineInputBorder())),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
-              value: _category,
+              initialValue: _category,
               decoration: const InputDecoration(labelText: "Category", border: OutlineInputBorder()),
               items: widget.categories.where((c) => c != "All").map((c) => DropdownMenuItem<String>(value: c, child: Text(c))).toList(),
               onChanged: (value) { if (value != null) setState(() => _category = value); },

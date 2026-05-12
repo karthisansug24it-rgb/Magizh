@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -16,8 +15,8 @@ class _InventorySheetState extends ConsumerState<InventorySheet> {
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
   // Local state to track changes before saving
-  Map<String, int> _stockChanges = {};
-  Set<String> _productsToDelete = {};
+  final Map<String, int> _stockChanges = {};
+  final Set<String> _productsToDelete = {};
   bool _isSaving = false;
 
   @override
@@ -279,7 +278,7 @@ class AddProductsToInventorySheet extends StatefulWidget {
 
 class _AddProductsToInventorySheetState extends State<AddProductsToInventorySheet> {
   List<Map<String, dynamic>> _inactiveProducts = [];
-  Set<String> _selectedIds = {};
+  final Set<String> _selectedIds = {};
   bool _isLoading = true;
   bool _isSaving = false;
 
