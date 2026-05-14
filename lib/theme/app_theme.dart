@@ -18,8 +18,8 @@ class AppTheme {
   static const Color infoBg = Color(0xFFE3F2FD);
 
   // Text Colors
-  static const Color textPrimary = Color(0xFF1A1A1A);
-  static const Color textSecondary = Color(0xFF757575);
+  static const Color textPrimary = Color(0xFF000000);
+  static const Color textSecondary = Color(0xFF000000);
 
   // Constants
   static const double borderRadius = 20.0;

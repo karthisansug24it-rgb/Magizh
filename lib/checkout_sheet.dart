@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 import 'main.dart'; // Access to tapCountsProvider, productsProvider, SoundManager, Haptics
+import 'expenses_page.dart';
 import 'theme/app_theme.dart';
 
 class CheckoutSheet extends ConsumerStatefulWidget {
@@ -117,7 +118,9 @@ class _CheckoutSheetState extends ConsumerState<CheckoutSheet> {
             content: const Text('Order placed successfully! 🎉'),
             backgroundColor: AppTheme.success,
             behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            duration: const Duration(seconds: 1),
+            margin: const EdgeInsets.only(bottom: 120, left: 24, right: 24),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           )
         );
       }
@@ -136,18 +139,7 @@ class _CheckoutSheetState extends ConsumerState<CheckoutSheet> {
     final products = ref.watch(productsProvider);
 
     if (tapCounts.isEmpty) {
-      return Container(
-        height: 300,
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.shopping_basket_outlined, size: 64, color: Colors.grey.shade300),
-            const SizedBox(height: 16),
-            const Text("Your basket is empty", style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: Colors.grey)),
-          ],
-        ),
-      );
+      return const SizedBox.shrink();
     }
 
     double totalAmount = 0;
@@ -222,7 +214,7 @@ class _CheckoutSheetState extends ConsumerState<CheckoutSheet> {
                   // Payment Method
                   const Align(
                     alignment: Alignment.centerLeft,
-                    child: Text("Payment Method", style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.grey)),
+                    child: Text("Payment Method", style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.black)),
                   ),
                   const SizedBox(height: 12),
                   Row(
@@ -257,20 +249,22 @@ class _CheckoutSheetState extends ConsumerState<CheckoutSheet> {
                   const SizedBox(height: 32),
                   
                   // Cash Collection UI
-                  AnimatedSize(
+                  AnimatedSwitcher(
                     duration: const Duration(milliseconds: 300),
-                    curve: Curves.easeInOut,
                     child: _paymentMethod == 'Offline' ? Column(
+                      key: const ValueKey('cash'),
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         const Divider(color: Color(0xFFEEEEEE), thickness: 1.5),
                         const SizedBox(height: 16),
-                        const Text("Cash Collected", style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.grey)),
-                        const SizedBox(height: 8),
+                        const Text("Cash Received from Customer", style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.black)),
+                        const SizedBox(height: 12),
                         TextField(
                           controller: _cashController,
                           keyboardType: TextInputType.number,
+                          autofocus: true,
                           decoration: InputDecoration(
+                            hintText: "Enter amount...",
                             prefixText: "₹ ",
                             prefixStyle: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black),
                             filled: true,
@@ -279,43 +273,56 @@ class _CheckoutSheetState extends ConsumerState<CheckoutSheet> {
                             enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade300)),
                             focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppTheme.primary, width: 2)),
                           ),
-                          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                          style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
                         ),
-                        const SizedBox(height: 16),
+                        const SizedBox(height: 20),
                         if (_cashController.text.isNotEmpty)
                           Container(
-                            padding: const EdgeInsets.all(16),
+                            padding: const EdgeInsets.all(20),
                             decoration: BoxDecoration(
-                              color: _cashCollected >= totalAmount ? AppTheme.successBg : Colors.red.shade50,
-                              borderRadius: BorderRadius.circular(12),
+                              color: _cashCollected >= totalAmount ? const Color(0xFFE8F5E9) : const Color(0xFFFFEBEE),
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(color: _cashCollected >= totalAmount ? Colors.green.shade200 : Colors.red.shade200),
                             ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            child: Column(
                               children: [
-                                Text(
-                                  _cashCollected >= totalAmount ? "Change to Return" : "Insufficient Cash",
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                    color: _cashCollected >= totalAmount ? AppTheme.success : Colors.red.shade700,
-                                  ),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text(
+                                      _cashCollected >= totalAmount ? "Balance to Give" : "Amount Pending",
+                                      style: TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.bold,
+                                        color: _cashCollected >= totalAmount ? Colors.green.shade800 : Colors.red.shade800,
+                                      ),
+                                    ),
+                                    Text(
+                                      _cashCollected >= totalAmount 
+                                          ? "₹${(_cashCollected - totalAmount).toStringAsFixed(0)}"
+                                          : "₹${(totalAmount - _cashCollected).toStringAsFixed(0)}",
+                                      style: TextStyle(
+                                        fontSize: 28,
+                                        fontWeight: FontWeight.w900,
+                                        color: _cashCollected >= totalAmount ? Colors.green.shade900 : Colors.red.shade900,
+                                      ),
+                                    ),
+                                  ],
                                 ),
-                                Text(
-                                  _cashCollected >= totalAmount 
-                                      ? "₹${(_cashCollected - totalAmount).toStringAsFixed(0)}"
-                                      : "Need ₹${(totalAmount - _cashCollected).toStringAsFixed(0)} more",
-                                  style: TextStyle(
-                                    fontSize: 20,
-                                    fontWeight: FontWeight.w900,
-                                    color: _cashCollected >= totalAmount ? AppTheme.success : Colors.red.shade700,
+                                if (_cashCollected >= totalAmount)
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 8.0),
+                                    child: Text(
+                                      "Give ₹${(_cashCollected - totalAmount).toStringAsFixed(0)} back to customer",
+                                      style: TextStyle(color: Colors.green.shade700, fontSize: 13, fontWeight: FontWeight.w500),
+                                    ),
                                   ),
-                                ),
                               ],
                             ),
                           ),
                         const SizedBox(height: 32),
                       ],
-                    ) : const SizedBox(height: 32),
+                    ) : const SizedBox(key: ValueKey('none'), height: 32),
                   ),
                 ],
               ),
@@ -381,12 +388,12 @@ class _PaymentMethodCard extends StatelessWidget {
         ),
         child: Column(
           children: [
-            Icon(icon, color: isSelected ? AppTheme.primary : Colors.grey.shade600, size: 28),
+            Icon(icon, color: isSelected ? AppTheme.primary : Colors.black, size: 28),
             const SizedBox(height: 8),
             Text(
               title,
               style: TextStyle(
-                color: isSelected ? AppTheme.primary : Colors.grey.shade700,
+                color: isSelected ? AppTheme.primary : Colors.black,
                 fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
               ),
             ),
