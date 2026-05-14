@@ -665,21 +665,40 @@ class ProductCard extends ConsumerWidget {
                           child: AnimatedScale(
                             duration: const Duration(milliseconds: 200),
                             scale: 1.0,
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF8B0000),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Text(
-                                "x$count",
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 12,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF8B0000),
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Text("x", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 10)),
+                                    SizedBox(
+                                      width: 25,
+                                      child: TextField(
+                                        key: ValueKey("qty-$productId-$count"),
+                                        onChanged: (val) {
+                                          final newVal = int.tryParse(val);
+                                          if (newVal != null) {
+                                            ref.read(tapCountsProvider.notifier).updateState((state) {
+                                              final newState = Map<dynamic, int>.from(state);
+                                              newState[productId] = newVal;
+                                              return newState;
+                                            });
+                                          }
+                                        },
+                                        textAlign: TextAlign.center,
+                                        keyboardType: TextInputType.number,
+                                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 12),
+                                        decoration: const InputDecoration(isDense: true, border: InputBorder.none, contentPadding: EdgeInsets.zero),
+                                        controller: TextEditingController(text: "$count"),
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
-                            ),
                           ),
                         ),
                     ],
@@ -782,6 +801,7 @@ class AddProductSheet extends StatefulWidget {
 class _AddProductSheetState extends State<AddProductSheet> {
   final _nameController = TextEditingController();
   final _priceController = TextEditingController();
+  final _otherCategoryController = TextEditingController();
   late String _category;
   XFile? _selectedImage;
   final ImagePicker _picker = ImagePicker();
@@ -789,7 +809,12 @@ class _AddProductSheetState extends State<AddProductSheet> {
   @override
   void initState() { super.initState(); _category = widget.categories.firstWhere((c) => c != "All", orElse: () => "Puff"); }
   @override
-  void dispose() { _nameController.dispose(); _priceController.dispose(); super.dispose(); }
+  void dispose() { 
+    _nameController.dispose(); 
+    _priceController.dispose(); 
+    _otherCategoryController.dispose();
+    super.dispose(); 
+  }
 
   Future<void> _pickImage() async {
     final image = await _picker.pickImage(source: ImageSource.gallery, imageQuality: 80);
@@ -812,11 +837,18 @@ class _AddProductSheetState extends State<AddProductSheet> {
             TextField(controller: _priceController, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: "Price", border: OutlineInputBorder())),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
-              initialValue: _category,
+              value: _category,
               decoration: const InputDecoration(labelText: "Category", border: OutlineInputBorder()),
               items: widget.categories.where((c) => c != "All").map((c) => DropdownMenuItem<String>(value: c, child: Text(c))).toList(),
               onChanged: (value) { if (value != null) setState(() => _category = value); },
             ),
+            if (_category == "Other") ...[
+              const SizedBox(height: 12),
+              TextField(
+                controller: _otherCategoryController,
+                decoration: const InputDecoration(labelText: "Enter new category name", border: OutlineInputBorder(), hintText: "e.g. Pizza, Cake"),
+              ),
+            ],
             const SizedBox(height: 12),
             SizedBox(width: double.infinity, child: OutlinedButton.icon(onPressed: _pickImage, icon: const Icon(Icons.photo_library_outlined), label: Text(_selectedImage == null ? "Choose photo" : "Photo selected"))),
             if (_selectedImage != null) ...[const SizedBox(height: 12), ClipRRect(borderRadius: BorderRadius.circular(12), child: Image.file(File(_selectedImage!.path), height: 120, width: double.infinity, fit: BoxFit.cover))],
@@ -824,8 +856,15 @@ class _AddProductSheetState extends State<AddProductSheet> {
             SizedBox(width: double.infinity, child: ElevatedButton(style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF8B0000), foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 14)), onPressed: () {
               final name = _nameController.text.trim();
               final price = double.tryParse(_priceController.text.trim());
-              if (name.isEmpty || price == null || price <= 0 || _selectedImage == null) { ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Enter valid name, price, and choose a photo."))); return; }
-              widget.onAdd(name, price, _category, _selectedImage!.path);
+              String finalCategory = _category;
+              if (_category == "Other") {
+                finalCategory = _otherCategoryController.text.trim();
+              }
+              if (name.isEmpty || price == null || price <= 0 || _selectedImage == null || (finalCategory == "Other" && finalCategory.isEmpty) || finalCategory.isEmpty) { 
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Enter valid name, price, category and choose a photo."))); 
+                return; 
+              }
+              widget.onAdd(name, price, finalCategory, _selectedImage!.path);
               Navigator.pop(context);
             }, child: const Text("Add product"))),
           ],

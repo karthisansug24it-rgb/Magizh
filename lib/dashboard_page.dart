@@ -24,7 +24,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
   int _yearlyOrders = 0;
   
   Map<int, int> _daysInMonthSales = {};
-  Map<int, int> _monthsInYearSales = {};
+  Map<int, double> _monthsInYearSales = <int, double>{};
   Map<int, int> _daysOfWeekSales = {};
 
   // Search by Date state
@@ -33,13 +33,22 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
   double _searchedDateRevenue = 0;
 
   // Chart Interaction State
+  final ScrollController _monthlyScrollController = ScrollController();
   int _touchedMonthlyIndex = -1;
   int _touchedYearlyIndex = -1;
   int _touchedWeeklyIndex = -1;
 
   @override
+  void dispose() {
+    _monthlyScrollController.dispose();
+    super.dispose();
+  }
+
+  @override
   void initState() {
     super.initState();
+    _searchedDate = DateTime.now(); // Default to today
+    _touchedMonthlyIndex = DateTime.now().day - 1; // Highlight today in chart
     _fetchData();
   }
 
@@ -52,18 +61,36 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
           .order('created_at', ascending: false);
 
       final data = List<Map<String, dynamic>>.from(response);
-      _processData(data);
-      
       if (mounted) {
         setState(() {
           _transactions = data;
+        });
+        _processData(data);
+        setState(() {
           _isLoading = false;
         });
+        _scrollToCurrentDay();
       }
     } catch (e) {
       debugPrint('DASHBOARD FETCH ERROR: $e');
       if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  void _scrollToCurrentDay() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_monthlyScrollController.hasClients) {
+        final day = DateTime.now().day;
+        if (day > 3) { // Only scroll if past the first few days
+          final offset = (day - 3) * (1200 / 31);
+          _monthlyScrollController.animateTo(
+            offset,
+            duration: const Duration(seconds: 1),
+            curve: Curves.easeOutCubic,
+          );
+        }
+      }
+    });
   }
 
   void _processData(List<Map<String, dynamic>> data) {
@@ -73,12 +100,12 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
     int currentYearOrders = 0;
     
     Map<int, int> daysInMonthSales = {};
-    Map<int, int> monthsInYearSales = {};
+    Map<int, double> monthsInYearSales = {};
     Map<int, int> daysOfWeekSales = {};
     
     // Initialize maps
     for (int i = 1; i <= 31; i++) daysInMonthSales[i] = 0;
-    for (int i = 1; i <= 12; i++) monthsInYearSales[i] = 0;
+    for (int i = 1; i <= 12; i++) monthsInYearSales[i] = 0.0;
     for (int i = 1; i <= 7; i++) daysOfWeekSales[i] = 0;
 
     for (final tx in data) {
@@ -92,10 +119,10 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
         daysInMonthSales[createdAt.day] = (daysInMonthSales[createdAt.day] ?? 0) + 1;
       }
       
-      // Current Year Orders
+      // Current Year Revenue per Month
       if (createdAt.year == now.year) {
         currentYearOrders++;
-        monthsInYearSales[createdAt.month] = (monthsInYearSales[createdAt.month] ?? 0) + 1;
+        monthsInYearSales[createdAt.month] = (monthsInYearSales[createdAt.month] ?? 0) + amount;
       }
       
       // All time Day of Week
@@ -201,7 +228,8 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                     _touchedMonthlyIndex,
                     "Day ${_touchedMonthlyIndex + 1}",
                     "${_daysInMonthSales[_touchedMonthlyIndex + 1] ?? 0} Orders",
-                    scrollableWidth: 900, // Large width for 31 thick bars
+                    scrollableWidth: 1200, // Even larger width for all 31 thick bars and labels
+                    controller: _monthlyScrollController,
                   ),
                   
                   const SizedBox(height: 32),
@@ -212,7 +240,8 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                     "Total revenue trend per month for ${DateTime.now().year}",
                     _touchedYearlyIndex,
                     DateFormat('MMMM').format(DateTime(2024, _touchedYearlyIndex == -1 ? 1 : _touchedYearlyIndex + 1)),
-                    "₹${_monthsInYearSales[_touchedYearlyIndex + 1]?.toStringAsFixed(0) ?? '0'}"
+                    "₹${_monthsInYearSales[_touchedYearlyIndex + 1]?.toStringAsFixed(0) ?? '0'}",
+                    scrollableWidth: 600, // Space for full Jan, Feb labels
                   ),
                   
                   const SizedBox(height: 32),
@@ -414,7 +443,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
     );
   }
 
-  Widget _buildBarChartContainer(Widget chart, String subtitle, int touchedIndex, String label, String value, {double? scrollableWidth}) {
+  Widget _buildBarChartContainer(Widget chart, String subtitle, int touchedIndex, String label, String value, {double? scrollableWidth, ScrollController? controller}) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(24),
@@ -436,15 +465,25 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
               builder: (context, val, child) => Opacity(
                 opacity: val,
                 child: Column(
-                  children: [
-                    Text(
-                      value,
-                      style: const TextStyle(fontSize: 34, fontWeight: FontWeight.w900, color: Color(0xFF8B0000), letterSpacing: -1),
-                    ),
-                    Text(label, style: const TextStyle(color: Colors.black54, fontWeight: FontWeight.w500, fontSize: 14)),
-                  ],
-                ),
+                children: [
+                  Text(label, style: const TextStyle(fontSize: 14, color: Colors.black45, fontWeight: FontWeight.w500)),
+                  const SizedBox(height: 8),
+                  TweenAnimationBuilder<double>(
+                    duration: const Duration(milliseconds: 500),
+                    tween: Tween<double>(begin: 0, end: double.tryParse(value.replaceAll(RegExp(r'[^0-9.]'), '')) ?? 0),
+                    curve: Curves.easeOutCirc,
+                    builder: (context, val, child) {
+                      final prefix = value.contains('₹') ? '₹' : '';
+                      final suffix = value.contains('Orders') ? ' Orders' : '';
+                      return Text(
+                        "$prefix${val.toStringAsFixed(0)}$suffix", 
+                        style: GoogleFonts.inter(fontSize: 32, fontWeight: FontWeight.w900, color: const Color(0xFF8B0000), letterSpacing: -1)
+                      );
+                    },
+                  ),
+                ],
               ),
+            ),
             )
           else
             const SizedBox(height: 62), // Placeholder to prevent jump
@@ -453,6 +492,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
             ScrollConfiguration(
               behavior: const ScrollBehavior().copyWith(physics: const BouncingScrollPhysics()),
               child: SingleChildScrollView(
+                controller: controller,
                 scrollDirection: Axis.horizontal,
                 child: SizedBox(
                   width: scrollableWidth,
@@ -498,12 +538,11 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
             sideTitles: SideTitles(
               showTitles: true,
               getTitlesWidget: (double value, TitleMeta meta) {
-                if (value % 5 != 0 && value != 1 && value != daysInMonth) return const SizedBox.shrink();
                 return Padding(
                   padding: const EdgeInsets.only(top: 12.0),
                   child: Text(
                     value.toInt().toString(), 
-                    style: GoogleFonts.inter(color: Colors.black45, fontSize: 11, fontWeight: FontWeight.w600)
+                    style: GoogleFonts.inter(color: Colors.black45, fontSize: 10, fontWeight: FontWeight.bold)
                   ),
                 );
               },
@@ -567,7 +606,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                   begin: Alignment.bottomCenter,
                   end: Alignment.topCenter,
                 ),
-                width: isTouched ? 22 : 18,
+                width: isTouched ? 32 : 28,
                 borderRadius: BorderRadius.circular(6),
                 backDrawRodData: BackgroundBarChartRodData(
                   show: true,
@@ -590,7 +629,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
       }
     }
 
-    final monthNames = ['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'];
+    final monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
     return LineChart(
       LineChartData(
@@ -635,9 +674,25 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
               setState(() => _touchedYearlyIndex = response.lineBarSpots!.first.x.toInt() - 1);
             }
           },
+          handleBuiltInTouches: true,
+          getTouchedSpotIndicator: (LineChartBarData barData, List<int> spotIndexes) {
+            return spotIndexes.map((spotIndex) {
+              return TouchedSpotIndicatorData(
+                FlLine(color: AppTheme.primary.withValues(alpha: 0.15), strokeWidth: 3),
+                FlDotData(
+                  getDotPainter: (spot, percent, bar, index) => FlDotCirclePainter(
+                    radius: 8,
+                    color: AppTheme.primary,
+                    strokeWidth: 3,
+                    strokeColor: Colors.white,
+                  ),
+                ),
+              );
+            }).toList();
+          },
           touchTooltipData: LineTouchTooltipData(
-            getTooltipColor: (_) => AppTheme.primary,
-            getTooltipItems: (spots) => spots.map((s) => LineTooltipItem("₹${s.y.toInt()}", const TextStyle(color: Colors.white, fontWeight: FontWeight.bold))).toList(),
+            getTooltipColor: (spot) => Colors.transparent,
+            getTooltipItems: (spots) => [],
           ),
         ),
         lineBarsData: [
@@ -682,10 +737,11 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
     }
 
     final dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    final avgOrders = _daysOfWeekSales.values.isEmpty ? 0.0 : _daysOfWeekSales.values.reduce((a, b) => a + b) / 7;
 
     return BarChart(
       BarChartData(
-        alignment: BarChartAlignment.spaceAround,
+        alignment: BarChartAlignment.spaceEvenly,
         maxY: maxY,
         barTouchData: BarTouchData(
           touchCallback: (FlTouchEvent event, barTouchResponse) {
@@ -718,12 +774,12 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
           leftTitles: AxisTitles(
             sideTitles: SideTitles(
               showTitles: true,
-              reservedSize: 32,
+              reservedSize: 45, // Increased for 500+ orders
               getTitlesWidget: (value, meta) {
                 if (value == 0 || value == maxY) return const SizedBox.shrink();
                 return Text(
                   value.toInt().toString(), 
-                  style: GoogleFonts.inter(color: Colors.black45, fontSize: 11, fontWeight: FontWeight.w500)
+                  style: GoogleFonts.inter(color: Colors.black45, fontSize: 10, fontWeight: FontWeight.bold)
                 );
               },
             ),
@@ -734,10 +790,27 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
         gridData: FlGridData(
           show: true,
           drawVerticalLine: false,
-          horizontalInterval: maxY > 20 ? 10 : 5,
+          horizontalInterval: maxY > 100 ? 100 : (maxY > 20 ? 10 : 5),
           getDrawingHorizontalLine: (value) {
             return FlLine(color: Colors.black.withValues(alpha: 0.03), strokeWidth: 1);
           },
+        ),
+        extraLinesData: ExtraLinesData(
+          horizontalLines: [
+            HorizontalLine(
+              y: avgOrders,
+              color: AppTheme.primary.withValues(alpha: 0.2),
+              strokeWidth: 2,
+              dashArray: [5, 5],
+              label: HorizontalLineLabel(
+                show: true,
+                alignment: Alignment.topRight,
+                padding: const EdgeInsets.only(right: 8, bottom: 4),
+                style: const TextStyle(color: Colors.black26, fontSize: 10, fontWeight: FontWeight.bold),
+                labelResolver: (_) => "AVG",
+              ),
+            ),
+          ],
         ),
         borderData: FlBorderData(show: false),
         barGroups: List.generate(7, (i) {
@@ -758,8 +831,8 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                   begin: Alignment.bottomCenter,
                   end: Alignment.topCenter,
                 ),
-                width: isTouched ? 42 : 36,
-                borderRadius: BorderRadius.circular(8),
+                width: isTouched ? 28 : 22,
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(6)),
                 backDrawRodData: BackgroundBarChartRodData(
                   show: true,
                   toY: maxY,

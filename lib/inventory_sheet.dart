@@ -178,17 +178,26 @@ class _InventorySheetState extends ConsumerState<InventorySheet> {
                           icon: const Icon(Icons.remove_circle_outline, color: Colors.black),
                           onPressed: () => _updateStock(id, -1, originalStock),
                         ),
-                        Container(
-                          width: 40,
-                          alignment: Alignment.center,
-                          padding: const EdgeInsets.symmetric(vertical: 6),
-                          decoration: BoxDecoration(
-                            border: Border.all(color: Colors.grey.shade300),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Text(
-                            "$displayStock",
-                            style: const TextStyle(fontWeight: FontWeight.bold),
+                        SizedBox(
+                          width: 55,
+                          child: TextField(
+                            key: ValueKey("$id-$displayStock"),
+                            onChanged: (val) {
+                              final newVal = int.tryParse(val);
+                              if (newVal != null) {
+                                setState(() => _stockChanges[id] = newVal);
+                              }
+                            },
+                            textAlign: TextAlign.center,
+                            keyboardType: TextInputType.number,
+                            decoration: InputDecoration(
+                              isDense: true,
+                              contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: Colors.grey.shade300)),
+                              enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: Colors.grey.shade300)),
+                            ),
+                            controller: TextEditingController(text: "$displayStock"),
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                           ),
                         ),
                         IconButton(
