@@ -27,7 +27,6 @@ class _InventorySheetState extends ConsumerState<InventorySheet> {
 
   void _updateStock(String id, int delta, int currentStock) {
     Haptics.light();
-    SoundManager.instance.playClickSound();
     setState(() {
       int newStock = (_stockChanges[id] ?? currentStock) + delta;
       if (newStock < 0) newStock = 0;
@@ -37,7 +36,6 @@ class _InventorySheetState extends ConsumerState<InventorySheet> {
 
   void _markForDeletion(String id) {
     Haptics.medium();
-    SoundManager.instance.playClickSound();
     setState(() {
       _productsToDelete.add(id);
     });
@@ -118,7 +116,7 @@ class _InventorySheetState extends ConsumerState<InventorySheet> {
           const SizedBox(height: 4),
           const Text(
             "Adjust quantities and upload",
-            style: TextStyle(fontSize: 14, color: Colors.grey),
+            style: TextStyle(fontSize: 14, color: Colors.black),
           ),
           const SizedBox(height: 16),
           // Search Bar
@@ -133,7 +131,7 @@ class _InventorySheetState extends ConsumerState<InventorySheet> {
               onChanged: (val) => setState(() => _searchQuery = val),
               decoration: const InputDecoration(
                 hintText: "Search products...",
-                prefixIcon: Icon(Icons.search, color: Colors.grey),
+                prefixIcon: Icon(Icons.search, color: Colors.black),
                 border: InputBorder.none,
                 contentPadding: EdgeInsets.symmetric(vertical: 14),
               ),
@@ -169,7 +167,7 @@ class _InventorySheetState extends ConsumerState<InventorySheet> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(p['name'], style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
-                          Text(p['category'] ?? 'N/A', style: const TextStyle(color: Colors.grey, fontSize: 13)),
+                          Text(p['category'] ?? 'N/A', style: const TextStyle(color: Colors.black, fontSize: 13)),
                         ],
                       ),
                     ),
@@ -177,7 +175,7 @@ class _InventorySheetState extends ConsumerState<InventorySheet> {
                     Row(
                       children: [
                         IconButton(
-                          icon: const Icon(Icons.remove_circle_outline, color: Colors.black54),
+                          icon: const Icon(Icons.remove_circle_outline, color: Colors.black),
                           onPressed: () => _updateStock(id, -1, originalStock),
                         ),
                         Container(
@@ -194,7 +192,7 @@ class _InventorySheetState extends ConsumerState<InventorySheet> {
                           ),
                         ),
                         IconButton(
-                          icon: const Icon(Icons.add_circle_outline, color: Colors.black54),
+                          icon: const Icon(Icons.add_circle_outline, color: Colors.black),
                           onPressed: () => _updateStock(id, 1, originalStock),
                         ),
                         IconButton(
@@ -343,17 +341,17 @@ class _AddProductsToInventorySheetState extends State<AddProductsToInventoryShee
           const SizedBox(height: 4),
           const Text(
             "Pick snacks to restore in inventory",
-            style: TextStyle(color: Colors.grey, fontSize: 14),
+            style: TextStyle(color: Colors.black, fontSize: 14),
           ),
           const SizedBox(height: 16),
           Expanded(
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator(color: Color(0xFF8B0000)))
                 : _inactiveProducts.isEmpty
-                    ? const Center(child: Text("No inactive products found.", style: TextStyle(color: Colors.grey)))
+                    ? const Center(child: Text("No inactive products found.", style: TextStyle(color: Colors.black)))
                     : ListView.separated(
                         itemCount: _inactiveProducts.length,
-                        separatorBuilder: (context, index) => const Divider(height: 1, color: Color(0xFFEEEEEE)),
+                        separatorBuilder: (context, index) => const Divider(height: 1, color: Colors.black),
                         itemBuilder: (context, index) {
                           final p = _inactiveProducts[index];
                           final id = p['id'];
@@ -361,9 +359,9 @@ class _AddProductsToInventorySheetState extends State<AddProductsToInventoryShee
 
                           return ListTile(
                             contentPadding: EdgeInsets.zero,
-                            leading: const Icon(Icons.fastfood_outlined, color: Colors.grey),
-                            title: Text(p['name'], style: TextStyle(color: isSelected ? Colors.black : Colors.grey.shade600)),
-                            subtitle: Text(p['category'] ?? 'N/A', style: const TextStyle(color: Colors.grey)),
+                            leading: const Icon(Icons.fastfood_outlined, color: Colors.black),
+                            title: Text(p['name'], style: TextStyle(color: isSelected ? Colors.black : Colors.black)),
+                            subtitle: Text(p['category'] ?? 'N/A', style: const TextStyle(color: Colors.black)),
                             trailing: Checkbox(
                               value: isSelected,
                               activeColor: Colors.grey.shade400,

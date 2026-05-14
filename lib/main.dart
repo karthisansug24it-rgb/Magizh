@@ -13,6 +13,7 @@ import 'expenses_page.dart';
 import 'inventory_sheet.dart';
 import 'theme/app_theme.dart';
 import 'checkout_sheet.dart';
+import 'dashboard_page.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -188,6 +189,8 @@ class _HomePageState extends ConsumerState<HomePage> {
     final isLoading = ref.watch(isLoadingProvider);
     final selectedCategory = ref.watch(selectedCategoryProvider);
     final searchQuery = ref.watch(searchProvider).toLowerCase();
+    final tapCounts = ref.watch(tapCountsProvider);
+    final selectedCount = tapCounts.values.fold<int>(0, (sum, count) => sum + count);
 
     final filteredProducts = products.where((p) {
       final matchesCategory = selectedCategory == "All" || 
@@ -219,6 +222,34 @@ class _HomePageState extends ConsumerState<HomePage> {
               ],
             ),
             _buildBottomNav(context),
+            if (selectedCount > 0)
+              Positioned(
+                bottom: 210,
+                right: 20,
+                child: GestureDetector(
+                  onTap: () {
+                    Haptics.medium();
+                    ref.read(tapCountsProvider.notifier).set({});
+                  },
+                  child: Container(
+                    width: 52,
+                    height: 52,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: const Color(0xFF8B0000).withValues(alpha: 0.2), width: 1),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.15),
+                          blurRadius: 12,
+                          offset: const Offset(0, 6),
+                        ),
+                      ],
+                    ),
+                    child: const Icon(Icons.close, color: Color(0xFF8B0000), size: 28),
+                  ),
+                ),
+              ),
           ],
         ),
       ),
@@ -234,7 +265,7 @@ class _HomePageState extends ConsumerState<HomePage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.cloud_off_rounded, size: 64, color: Colors.grey),
+            const Icon(Icons.cloud_off_rounded, size: 64, color: Colors.black),
             const SizedBox(height: 16),
             const Text(
               "Connection Error",
@@ -244,7 +275,7 @@ class _HomePageState extends ConsumerState<HomePage> {
             Text(
               error ?? "Could not connect to Supabase",
               textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.grey),
+              style: const TextStyle(color: Colors.black),
             ),
             const SizedBox(height: 24),
             ElevatedButton.icon(
@@ -269,24 +300,33 @@ class _HomePageState extends ConsumerState<HomePage> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text("Good Morning,", style: Theme.of(context).textTheme.bodyMedium),
-              Text("Magizh", style: Theme.of(context).textTheme.displayLarge),
-            ],
-          ),
-            GestureDetector(
-            onTap: () {
-              Haptics.medium();
-              _openAdminAddProductSheet();
-            },
-            child: CircleAvatar(
-              backgroundColor: AppTheme.primaryLight.withValues(alpha: 0.1),
-              radius: 24,
-              child: const Icon(Icons.add, color: AppTheme.primary),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text("Magizh", style: Theme.of(context).textTheme.displayLarge, overflow: TextOverflow.ellipsis),
+              ],
             ),
-          )
+          ),
+          const SizedBox(width: 12),
+          GestureDetector(
+            onTap: _openAdminAddProductSheet,
+            child: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: const Color(0xFF8B0000),
+                borderRadius: BorderRadius.circular(10),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.1),
+                    blurRadius: 4,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: const Icon(Icons.add, color: Colors.white, size: 24),
+            ),
+          ),
         ],
       ),
     );
@@ -302,7 +342,7 @@ class _HomePageState extends ConsumerState<HomePage> {
           onChanged: (value) => ref.read(searchProvider.notifier).val = value,
           decoration: InputDecoration(
             hintText: "Search for food...",
-            prefixIcon: const Icon(Icons.search, color: Colors.grey),
+            prefixIcon: const Icon(Icons.search, color: Colors.black),
             suffixIcon: _searchController.text.isNotEmpty ? IconButton(icon: const Icon(Icons.clear, size: 20), onPressed: () { _searchController.clear(); ref.read(searchProvider.notifier).val = ""; }) : null,
             border: InputBorder.none,
             contentPadding: const EdgeInsets.symmetric(vertical: 15),
@@ -330,7 +370,6 @@ class _HomePageState extends ConsumerState<HomePage> {
               child: GestureDetector(
                 onTap: () {
                   Haptics.light();
-                  SoundManager.instance.playClickSound();
                   ref.read(selectedCategoryProvider.notifier).val = cat;
                 },
                 child: AnimatedContainer(
@@ -399,87 +438,129 @@ class _HomePageState extends ConsumerState<HomePage> {
     });
 
     return Positioned(
-      bottom: 12 + MediaQuery.of(context).padding.bottom,
-      left: 20, right: 20,
+      bottom: 0,
+      left: 0, right: 0,
       child: Container(
-        padding: const EdgeInsets.fromLTRB(8, 10, 8, 8),
-        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(40), boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 20, offset: const Offset(0, 10))]),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (selectedCount > 0)
-              GestureDetector(
-                onTap: () {
-                  Haptics.light();
-                  showModalBottomSheet(
-                    context: context,
-                    isScrollControlled: true,
-                    backgroundColor: Colors.white,
-                    shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-                    builder: (context) => const CheckoutSheet(),
-                  );
-                },
-                child: Container(
-                  margin: const EdgeInsets.fromLTRB(8, 0, 8, 10),
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                  decoration: BoxDecoration(color: const Color(0xFF8B0000), borderRadius: BorderRadius.circular(18)),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text("Selected: $selectedCount", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
-                      Text("Amount: ₹${total.toStringAsFixed(0)}", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
-                    ],
-                  ),
-                ),
-              ),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                _buildNavItem(Icons.home, "Home", true, () {}),
-                _buildNavItem(Icons.shopping_basket_outlined, "Basket", false, () {
-                  Haptics.light();
-                  showModalBottomSheet(
-                    context: context,
-                    isScrollControlled: true,
-                    backgroundColor: Colors.white,
-                    shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-                    builder: (context) => const CheckoutSheet(),
-                  );
-                }),
-                _buildNavItem(Icons.inventory_2_outlined, "Inventory", false, () {
-                  Haptics.light();
-                  showModalBottomSheet(
-                    context: context,
-                    isScrollControlled: true,
-                    backgroundColor: Colors.white,
-                    shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-                    builder: (context) => const InventorySheet(),
-                  );
-                }),
-                _buildNavItem(Icons.receipt_long, "Expenses", false, () {
-                  Haptics.light();
-                  Navigator.push(context, MaterialPageRoute(builder: (_) => const ExpensesPage()));
-                }),
-              ],
+        decoration: BoxDecoration(
+          color: Colors.white,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.1),
+              blurRadius: 10,
+              offset: const Offset(0, -2),
             ),
           ],
+        ),
+        child: SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (selectedCount > 0)
+                Column(
+                  children: [
+                    Container(
+                      margin: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF8B0000),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(child: Text("Selected: $selectedCount", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis)),
+                          const SizedBox(width: 12),
+                          Flexible(child: Text("Amount: ₹${total.toStringAsFixed(0)}", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis)),
+                        ],
+                      ),
+                    ),
+                    Container(
+                      margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: () {
+                          Haptics.light();
+                          showDialog(
+                            context: context,
+                            builder: (context) => const CheckoutSheet(),
+                          );
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.white,
+                          foregroundColor: const Color(0xFF8B0000),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            side: const BorderSide(color: Color(0xFF8B0000), width: 1),
+                          ),
+                        ),
+                        child: const Text(
+                          "Continue",
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              Container(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: [
+                    _buildWhatsAppNavItem(Icons.home, "Home", true, () {}),
+                    _buildWhatsAppNavItem(Icons.inventory_2_outlined, "Inventory", false, () {
+                      Haptics.light();
+                      showModalBottomSheet(
+                        context: context,
+                        isScrollControlled: true,
+                        backgroundColor: Colors.white,
+                        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+                        builder: (context) => const InventorySheet(),
+                      );
+                    }),
+                    _buildWhatsAppNavItem(Icons.receipt_long_outlined, "Expense", false, () {
+                      Haptics.light();
+                      Navigator.push(context, MaterialPageRoute(builder: (_) => const ExpensesPage()));
+                    }),
+                    _buildWhatsAppNavItem(Icons.bar_chart_rounded, "Analytics", false, () {
+                      Haptics.light();
+                      Navigator.push(context, MaterialPageRoute(builder: (_) => const DashboardPage()));
+                    }),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildNavItem(IconData icon, String label, bool isSelected, VoidCallback onTap) {
+  Widget _buildWhatsAppNavItem(IconData icon, String label, bool isSelected, VoidCallback onTap) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        decoration: BoxDecoration(color: isSelected ? const Color(0xFF8B0000) : Colors.transparent, borderRadius: BorderRadius.circular(30)),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, color: isSelected ? Colors.white : Colors.grey.shade400, size: 24),
+            Icon(
+              icon, 
+              color: isSelected ? const Color(0xFF8B0000) : Colors.black, 
+              size: 24,
+            ),
             const SizedBox(height: 2),
-            Text(label, style: TextStyle(color: isSelected ? Colors.white : Colors.grey.shade400, fontSize: 10, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal)),
+            Text(
+              label, 
+              style: TextStyle(
+                color: isSelected ? const Color(0xFF8B0000) : Colors.black, 
+                fontSize: 11, 
+                fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400
+              ),
+            ),
           ],
         ),
       ),
@@ -541,98 +622,138 @@ class ProductCard extends ConsumerWidget {
     return Container(
       decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), border: Border.all(color: isSelected ? const Color(0xFF8B0000) : Colors.transparent, width: 1.6), boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 10, offset: const Offset(0, 4))]),
       padding: const EdgeInsets.all(10),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Stack(
         children: [
-          Expanded(
-            child: GestureDetector(
-              onTap: () {
-                Haptics.light();
-                SoundManager.instance.playClickSound();
-                ref.read(tapCountsProvider.notifier).updateState((state) {
-                  final newState = Map<dynamic, int>.from(state);
-                  newState[productId] = (state[productId] ?? 0) + 1 >= 100 ? 0 : (state[productId] ?? 0) + 1;
-                  return newState;
-                });
-              },
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  Hero(
-                    tag: 'img_$productId',
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(15),
-                      child: _buildProductImage(product),
-                    ),
-                  ),
-                  if (product['is_syncing'] == true)
-                    Container(
-                      decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.3),
-                        borderRadius: BorderRadius.circular(15),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: GestureDetector(
+                  onTap: () {
+                    Haptics.light();
+                    SoundManager.instance.playClickSound();
+                    ref.read(tapCountsProvider.notifier).updateState((state) {
+                      final newState = Map<dynamic, int>.from(state);
+                      newState[productId] = (state[productId] ?? 0) + 1 >= 100 ? 0 : (state[productId] ?? 0) + 1;
+                      return newState;
+                    });
+                  },
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      Hero(
+                        tag: 'img_$productId',
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(15),
+                          child: _buildProductImage(product),
+                        ),
                       ),
-                      child: const Center(
-                        child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
-                      ),
-                    ),
-                  if (isSelected)
-                    Positioned(
-                      top: 8,
-                      left: 8,
-                      child: AnimatedScale(
-                        duration: const Duration(milliseconds: 200),
-                        scale: 1.0,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      if (product['is_syncing'] == true)
+                        Container(
                           decoration: BoxDecoration(
-                            color: const Color(0xFF8B0000),
-                            borderRadius: BorderRadius.circular(12),
+                            color: Colors.black.withValues(alpha: 0.3),
+                            borderRadius: BorderRadius.circular(15),
                           ),
-                          child: Text(
-                            "x$count",
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w700,
-                              fontSize: 12,
+                          child: const Center(
+                            child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                          ),
+                        ),
+                      if (isSelected)
+                        Positioned(
+                          top: 8,
+                          left: 8,
+                          child: AnimatedScale(
+                            duration: const Duration(milliseconds: 200),
+                            scale: 1.0,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF8B0000),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Text(
+                                "x$count",
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 12,
+                                ),
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                    ),
-                  if (isSelected)
-                    Positioned(
-                      top: 8,
-                      right: 8,
-                      child: GestureDetector(
-                        onTap: () {
-                          Haptics.medium();
-                          SoundManager.instance.playClickSound();
-                          ref.read(tapCountsProvider.notifier).updateState((state) {
-                            final newState = Map<dynamic, int>.from(state);
-                            newState.remove(productId);
-                            return newState;
-                          });
-                        },
-                        child: Container(
-                          width: 26,
-                          height: 26,
-                          decoration: const BoxDecoration(
-                            color: Colors.white,
-                            shape: BoxShape.circle,
-                            boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 4)],
-                          ),
-                          child: const Icon(Icons.close, size: 16, color: Colors.black87),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          product["name"], 
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.black), 
+                          maxLines: 1, 
+                          overflow: TextOverflow.ellipsis
                         ),
-                      ),
+                        const SizedBox(height: 4),
+                        Text(
+                          "₹${(product["price"] as num).toInt()}", 
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w900, 
+                            fontSize: 18, 
+                            color: Color(0xFF8B0000)
+                          ),
+                        ),
+                      ],
                     ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    "${product["stock_qty"] ?? 0}",
+                    style: TextStyle(
+                      fontWeight: FontWeight.w900,
+                      fontSize: 24,
+                      color: (product["stock_qty"] ?? 0) <= 5 
+                          ? Colors.red 
+                          : Colors.black,
+                    ),
+                  ),
                 ],
               ),
-            ),
+            ],
           ),
-          const SizedBox(height: 10),
-          Text(product["name"], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14), maxLines: 1, overflow: TextOverflow.ellipsis),
-          const SizedBox(height: 4),
-          Text("₹${(product["price"] as num).toInt()}", style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16, color: Color(0xFF8B0000))),
+          // X button only visible when selected
+          if (isSelected)
+            Positioned(
+              top: 8,
+              right: 8,
+              child: GestureDetector(
+                onTap: () {
+                  Haptics.medium();
+                  ref.read(tapCountsProvider.notifier).updateState((state) {
+                    final newState = Map<dynamic, int>.from(state);
+                    newState.remove(productId);
+                    return newState;
+                  });
+                },
+                child: Container(
+                  width: 26,
+                  height: 26,
+                  decoration: const BoxDecoration(
+                    color: Colors.white,
+                    shape: BoxShape.circle,
+                    boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 4)],
+                  ),
+                  child: const Icon(Icons.close, size: 16, color: Colors.black87),
+                ),
+              ),
+            ),
         ],
       ),
     );

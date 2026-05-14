@@ -5,193 +5,260 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-class ExpenseTransactionsNotifier extends Notifier<AsyncValue<List<Map<String, dynamic>>>> {
+// Simple notifiers to hold the data
+class ExpensesListNotifier extends Notifier<List<Map<String, dynamic>>> {
   @override
-  AsyncValue<List<Map<String, dynamic>>> build() {
-    _fetch();
-    return const AsyncValue.loading();
-  }
-
-  Future<void> _fetch() async {
-    try {
-      final response = await Supabase.instance.client
-          .from('expense_transactions')
-          .select()
-          .order('created_at', ascending: false);
-      state = AsyncValue.data(List<Map<String, dynamic>>.from(response));
-    } catch (e) {
-      state = AsyncValue.error(e, StackTrace.current);
-    }
-  }
+  List<Map<String, dynamic>> build() => [];
+  void update(List<Map<String, dynamic>> data) => state = data;
 }
 
-final expensesProvider = NotifierProvider<ExpenseTransactionsNotifier, AsyncValue<List<Map<String, dynamic>>>>(
-    ExpenseTransactionsNotifier.new);
+class ExpensesLoadingNotifier extends Notifier<bool> {
+  @override
+  bool build() => true;
+  void update(bool loading) => state = loading;
+}
 
-class ExpensesPage extends ConsumerWidget {
+final expensesListProvider = NotifierProvider<ExpensesListNotifier, List<Map<String, dynamic>>>(ExpensesListNotifier.new);
+final isExpensesLoadingProvider = NotifierProvider<ExpensesLoadingNotifier, bool>(ExpensesLoadingNotifier.new);
+
+class ExpensesPage extends ConsumerStatefulWidget {
   const ExpensesPage({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final expensesAsync = ref.watch(expensesProvider);
+  ConsumerState<ExpensesPage> createState() => _ExpensesPageState();
+}
+
+class _ExpensesPageState extends ConsumerState<ExpensesPage> {
+  @override
+  void initState() {
+    super.initState();
+    // Fetch data as soon as the page opens
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _fetchData();
+    });
+  }
+
+  Future<void> _fetchData() async {
+    if (!mounted) return;
+    ref.read(isExpensesLoadingProvider.notifier).update(true);
+    
+    try {
+      debugPrint("EXPENSE_DEBUG: Starting fetch from 'expense_transactions'...");
+      
+      final response = await Supabase.instance.client
+          .from('expense_transactions')
+          .select('*')
+          .order('created_at', ascending: false);
+      
+      debugPrint("EXPENSE_DEBUG: Successfully fetched ${response.length} rows.");
+      
+      if (mounted) {
+        ref.read(expensesListProvider.notifier).update(List<Map<String, dynamic>>.from(response));
+        ref.read(isExpensesLoadingProvider.notifier).update(false);
+      }
+    } catch (e) {
+      debugPrint("EXPENSE_DEBUG: FATAL ERROR during fetch: $e");
+      if (mounted) {
+        ref.read(isExpensesLoadingProvider.notifier).update(false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Fetch error: $e"), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final expenses = ref.watch(expensesListProvider);
+    final isLoading = ref.watch(isExpensesLoadingProvider);
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FA),
       appBar: AppBar(
         backgroundColor: const Color(0xFF8B0000),
         foregroundColor: Colors.white,
-        title: Text(
-          "Expense",
-          style: GoogleFonts.inter(fontWeight: FontWeight.w600),
+        title: const Text("Expense", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white),
+          onPressed: () => Navigator.pop(context),
         ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: _fetchData,
+          )
+        ],
       ),
-      body: expensesAsync.when(
-        data: (expenses) {
-          if (expenses.isEmpty) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.receipt_long_outlined, size: 80, color: Colors.grey.shade300),
-                  const SizedBox(height: 16),
-                  Text("No sales yet today!", style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: Colors.grey.shade500)),
-                ],
-              ),
-            );
-          }
-          return ListView.builder(
-            padding: const EdgeInsets.all(16),
-            itemCount: expenses.length,
-            itemBuilder: (context, index) {
-              return ExpenseCard(expense: expenses[index]);
-            },
-          );
-        },
-        loading: () => const Center(child: CircularProgressIndicator(color: Color(0xFF8B0000))),
-        error: (err, stack) => Center(child: Text('Error: $err')),
-      ),
+      body: isLoading
+          ? const Center(child: CircularProgressIndicator(color: Color(0xFF8B0000)))
+          : expenses.isEmpty
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.receipt_long_outlined, size: 80, color: Colors.black),
+                      const SizedBox(height: 16),
+                      const Text("No orders found", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black)),
+                      const SizedBox(height: 8),
+                      TextButton(onPressed: _fetchData, child: const Text("Try Again", style: TextStyle(color: Color(0xFF8B0000)))),
+                    ],
+                  ),
+                )
+              : RefreshIndicator(
+                  onRefresh: _fetchData,
+                  child: ListView.builder(
+                    padding: const EdgeInsets.all(16),
+                    itemCount: expenses.length,
+                    itemBuilder: (context, index) => ExpenseCard(expense: expenses[index]),
+                  ),
+                ),
     );
   }
 }
 
-class ExpenseCard extends StatelessWidget {
+class ExpenseCard extends StatefulWidget {
   final Map<String, dynamic> expense;
-
   const ExpenseCard({super.key, required this.expense});
 
   @override
+  State<ExpenseCard> createState() => _ExpenseCardState();
+}
+
+class _ExpenseCardState extends State<ExpenseCard> {
+  bool _isExpanded = false;
+
+  @override
   Widget build(BuildContext context) {
+    // Robust item parsing
     List<dynamic> items = [];
-    if (expense['items'] != null) {
-      try {
-        items = jsonDecode(expense['items'] as String);
-      } catch (e) {
-        items = [];
+    final rawItems = widget.expense['items'];
+    if (rawItems != null) {
+      if (rawItems is String) {
+        try { items = jsonDecode(rawItems); } catch (_) {}
+      } else if (rawItems is List) {
+        items = rawItems;
       }
     }
 
-    final createdAt = DateTime.tryParse(expense['created_at'] ?? '')?.toLocal() ?? DateTime.now();
-    final dayName = DateFormat('EEEE').format(createdAt);
-    final dateStr = DateFormat('dd-MM-yyyy').format(createdAt);
+    final createdAt = DateTime.tryParse(widget.expense['created_at'] ?? '')?.toLocal() ?? DateTime.now();
     final timeStr = DateFormat('h:mma').format(createdAt).toLowerCase();
+    final dayName = DateFormat('EEEE').format(createdAt);
+    final dateStrFormatted = DateFormat('dd-MM-yyyy').format(createdAt);
+    final paymentMethod = (widget.expense['payment_method'] as String?)?.toLowerCase() ?? 'unknown';
 
-    final totalAmount = (expense['total_amount'] as num?)?.toDouble() ?? 0.0;
-    final paymentMethod = (expense['payment_method'] as String?)?.toLowerCase() ?? 'unknown';
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          )
-        ],
-      ),
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Items List
-          ...items.map((item) {
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 4.0),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    item['product_name'] ?? 'Unknown',
-                    style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 14),
-                  ),
-                  Text(
-                    "x${item['qty'] ?? 1}",
-                    style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF8B0000), fontSize: 14),
-                  ),
-                ],
-              ),
-            );
-          }),
-          const SizedBox(height: 12),
-          const Divider(height: 1, color: Color(0xFFEEEEEE)),
-          const SizedBox(height: 12),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              // Date and Time info
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text("Day: $dayName", style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
-                  const SizedBox(height: 4),
-                  Text("Date: $dateStr", style: const TextStyle(color: Colors.black54, fontSize: 13)),
-                  const SizedBox(height: 4),
-                  Text("Time: $timeStr", style: const TextStyle(color: Colors.black54, fontSize: 13)),
-                  const SizedBox(height: 12),
-                  // Payment Tag
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: paymentMethod == 'online' ? Colors.blue.shade50 : Colors.green.shade50,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          Icons.receipt_long_outlined,
-                          size: 14,
-                          color: paymentMethod == 'online' ? Colors.blue.shade700 : Colors.green.shade700,
-                        ),
-                        const SizedBox(width: 6),
-                        Text(
-                          paymentMethod == 'online' ? 'Online' : 'Offline',
-                          style: TextStyle(
-                            color: paymentMethod == 'online' ? Colors.blue.shade700 : Colors.green.shade700,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 12,
+    return GestureDetector(
+      onTap: () {
+        setState(() => _isExpanded = !_isExpanded);
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
+        margin: const EdgeInsets.only(bottom: 16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.05),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            )
+          ],
+        ),
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header: Total and Time summary
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text(
+                              "₹${(widget.expense['total_amount'] as num).toInt()}",
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w900,
+                                fontSize: 22,
+                                color: Color(0xFF8B0000),
+                              ),
+                            ),
                           ),
-                        ),
-                      ],
-                    ),
-                  )
-                ],
-              ),
-              // Total Amount
-              Text(
-                "₹${totalAmount.toInt()}",
-                style: const TextStyle(
-                  fontWeight: FontWeight.w900,
-                  fontSize: 24,
-                  color: Color(0xFF8B0000),
+                          const SizedBox(width: 12),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: paymentMethod == 'online' ? Colors.blue.shade50 : Colors.green.shade50,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              paymentMethod == 'online' ? 'Online' : 'Offline',
+                              style: TextStyle(
+                                color: paymentMethod == 'online' ? Colors.blue.shade700 : Colors.green.shade700,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 10,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        "$dayName, $timeStr • ${items.length} items",
+                        style: const TextStyle(fontSize: 12, color: Colors.black54),
+                      ),
+                    ],
+                  ),
                 ),
+                Icon(
+                  _isExpanded ? Icons.expand_less_rounded : Icons.expand_more_rounded,
+                  color: Colors.black38,
+                ),
+              ],
+            ),
+            
+            // Collapsible Section
+            if (_isExpanded) ...[
+              const SizedBox(height: 16),
+              const Divider(height: 1, color: Color(0xFFEEEEEE)),
+              const SizedBox(height: 16),
+              ...items.map((item) {
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 8.0),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          item['product_name'] ?? 'Unknown',
+                          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: Colors.black),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        "x${item['qty'] ?? 1}",
+                        style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF8B0000), fontSize: 14),
+                      ),
+                    ],
+                  ),
+                );
+              }),
+              const SizedBox(height: 12),
+              Text(
+                "Date: $dateStrFormatted",
+                style: const TextStyle(color: Colors.black45, fontSize: 12, fontStyle: FontStyle.italic),
               ),
             ],
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
