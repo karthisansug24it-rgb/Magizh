@@ -200,18 +200,19 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                     "Orders by day for ${DateFormat('MMMM yyyy').format(DateTime.now())}",
                     _touchedMonthlyIndex,
                     "Day ${_touchedMonthlyIndex + 1}",
-                    "${_daysInMonthSales[_touchedMonthlyIndex + 1] ?? 0} Orders"
+                    "${_daysInMonthSales[_touchedMonthlyIndex + 1] ?? 0} Orders",
+                    scrollableWidth: 900, // Large width for 31 thick bars
                   ),
                   
                   const SizedBox(height: 32),
-                  _buildSectionTitle("Monthly Orders (This Year)"),
+                  _buildSectionTitle("Yearly Trend (This Year)"),
                   const SizedBox(height: 16),
                   _buildBarChartContainer(
-                    _buildYearlyMonthsChart(),
-                    "Orders per month for ${DateTime.now().year}",
+                    _buildYearlyTrendChart(), 
+                    "Total revenue trend per month for ${DateTime.now().year}",
                     _touchedYearlyIndex,
                     DateFormat('MMMM').format(DateTime(2024, _touchedYearlyIndex == -1 ? 1 : _touchedYearlyIndex + 1)),
-                    "${_monthsInYearSales[_touchedYearlyIndex + 1] ?? 0} Orders"
+                    "₹${_monthsInYearSales[_touchedYearlyIndex + 1]?.toStringAsFixed(0) ?? '0'}"
                   ),
                   
                   const SizedBox(height: 32),
@@ -267,12 +268,14 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                 child: const Icon(Icons.account_balance_wallet, color: Color(0xFF8B0000), size: 28),
               ),
               const SizedBox(width: 16),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text("Current Month Salary", style: TextStyle(fontSize: 14, color: Colors.black54, fontWeight: FontWeight.w600)),
-                  Text("$monthName Tracker", style: const TextStyle(fontSize: 12, color: Colors.black45)),
-                ],
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text("Current Month Salary", style: TextStyle(fontSize: 14, color: Colors.black54, fontWeight: FontWeight.w600)),
+                    Text("$monthName Tracker", style: const TextStyle(fontSize: 12, color: Colors.black45)),
+                  ],
+                ),
               ),
             ],
           ),
@@ -282,16 +285,38 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
             style: const TextStyle(fontSize: 42, fontWeight: FontWeight.w900, color: Color(0xFF8B0000), letterSpacing: -1),
           ),
           const SizedBox(height: 8),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: Colors.green.shade50,
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Text(
-              "$_monthlyOrders total orders this month",
-              style: TextStyle(color: Colors.green.shade700, fontWeight: FontWeight.bold, fontSize: 12),
-            ),
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.green.shade50,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  "$_monthlyOrders total orders",
+                  style: TextStyle(color: Colors.green.shade700, fontWeight: FontWeight.bold, fontSize: 12),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF8B0000).withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: const Row(
+                  children: [
+                    Icon(Icons.trending_up, color: Color(0xFF8B0000), size: 14),
+                    SizedBox(width: 4),
+                    Text(
+                      "Growth",
+                      style: TextStyle(color: Color(0xFF8B0000), fontWeight: FontWeight.bold, fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           )
         ],
       ),
@@ -312,11 +337,13 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               const Text("Search by Date", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black)),
               Row(
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   IconButton(
                     icon: const Icon(Icons.chevron_left, color: Color(0xFF8B0000)),
@@ -366,22 +393,28 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
   }
 
   Widget _buildSearchStat(String label, String value, IconData icon) {
-    return Column(
-      children: [
-        Row(
-          children: [
-            Icon(icon, size: 16, color: Colors.black54),
-            const SizedBox(width: 4),
-            Text(label, style: const TextStyle(fontSize: 12, color: Colors.black54)),
-          ],
-        ),
-        const SizedBox(height: 4),
-        Text(value, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: Colors.black)),
-      ],
+    return Expanded(
+      child: Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, size: 16, color: Colors.black54),
+              const SizedBox(width: 4),
+              Flexible(child: Text(label, style: const TextStyle(fontSize: 12, color: Colors.black54), overflow: TextOverflow.ellipsis)),
+            ],
+          ),
+          const SizedBox(height: 4),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(value, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: Colors.black)),
+          ),
+        ],
+      ),
     );
   }
 
-  Widget _buildBarChartContainer(Widget chart, String subtitle, int touchedIndex, String label, String value) {
+  Widget _buildBarChartContainer(Widget chart, String subtitle, int touchedIndex, String label, String value, {double? scrollableWidth}) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(24),
@@ -406,7 +439,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                   children: [
                     Text(
                       value,
-                      style: const TextStyle(fontSize: 32, fontWeight: FontWeight.w900, color: Colors.black, letterSpacing: -1),
+                      style: const TextStyle(fontSize: 34, fontWeight: FontWeight.w900, color: Color(0xFF8B0000), letterSpacing: -1),
                     ),
                     Text(label, style: const TextStyle(color: Colors.black54, fontWeight: FontWeight.w500, fontSize: 14)),
                   ],
@@ -416,7 +449,20 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
           else
             const SizedBox(height: 62), // Placeholder to prevent jump
           const SizedBox(height: 32),
-          SizedBox(height: 180, child: chart),
+          if (scrollableWidth != null)
+            ScrollConfiguration(
+              behavior: const ScrollBehavior().copyWith(physics: const BouncingScrollPhysics()),
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: SizedBox(
+                  width: scrollableWidth,
+                  height: 180,
+                  child: chart,
+                ),
+              ),
+            )
+          else
+            SizedBox(height: 180, child: chart),
         ],
       ),
     );
@@ -439,24 +485,10 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
         maxY: maxY,
         barTouchData: BarTouchData(
           touchCallback: (FlTouchEvent event, barTouchResponse) {
-            setState(() {
-              if (!event.isInterestedForInteractions ||
-                  barTouchResponse == null ||
-                  barTouchResponse.spot == null) {
-                _touchedMonthlyIndex = -1;
-                return;
-              }
-              _touchedMonthlyIndex = barTouchResponse.spot!.touchedBarGroupIndex;
-            });
+            if (barTouchResponse != null && barTouchResponse.spot != null) {
+              setState(() => _touchedMonthlyIndex = barTouchResponse.spot!.touchedBarGroupIndex);
+            }
           },
-          touchTooltipData: BarTouchTooltipData(
-            getTooltipColor: (_) => Colors.transparent,
-            tooltipPadding: EdgeInsets.zero,
-            tooltipMargin: 8,
-            getTooltipItem: (group, groupIndex, rod, rodIndex) {
-              return null; // Custom UI below chart
-            },
-          ),
           enabled: true,
           handleBuiltInTouches: false,
         ),
@@ -502,6 +534,23 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
             return FlLine(color: Colors.black.withValues(alpha: 0.03), strokeWidth: 1);
           },
         ),
+        extraLinesData: ExtraLinesData(
+          horizontalLines: [
+            HorizontalLine(
+              y: _daysInMonthSales.values.isEmpty ? 0 : _daysInMonthSales.values.reduce((a, b) => a + b) / daysInMonth,
+              color: AppTheme.primary.withValues(alpha: 0.2),
+              strokeWidth: 2,
+              dashArray: [5, 5],
+              label: HorizontalLineLabel(
+                show: true,
+                alignment: Alignment.topRight,
+                padding: const EdgeInsets.only(right: 8, bottom: 4),
+                style: const TextStyle(color: Colors.black26, fontSize: 10, fontWeight: FontWeight.bold),
+                labelResolver: (_) => "AVG",
+              ),
+            ),
+          ],
+        ),
         borderData: FlBorderData(show: false),
         barGroups: List.generate(daysInMonth, (i) {
           final day = i + 1;
@@ -514,114 +563,11 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                 gradient: LinearGradient(
                   colors: isTouched 
                     ? [const Color(0xFF8B0000), const Color(0xFFE53935)] 
-                    : [const Color(0xFF8B0000).withValues(alpha: 0.3), const Color(0xFF8B0000).withValues(alpha: 0.1)],
+                    : [const Color(0xFF8B0000).withValues(alpha: 0.5), const Color(0xFF8B0000).withValues(alpha: 0.2)],
                   begin: Alignment.bottomCenter,
                   end: Alignment.topCenter,
                 ),
-                width: isTouched ? 12 : 8,
-                borderRadius: BorderRadius.circular(4),
-                backDrawRodData: BackgroundBarChartRodData(
-                  show: true,
-                  toY: maxY,
-                  color: Colors.black.withValues(alpha: 0.01),
-                ),
-              ),
-            ],
-          );
-        }),
-      ),
-    );
-  }
-
-  Widget _buildYearlyMonthsChart() {
-    double maxY = 5;
-    for (int i = 1; i <= 12; i++) {
-      if ((_monthsInYearSales[i] ?? 0) > maxY) {
-        maxY = (_monthsInYearSales[i] ?? 0).toDouble() + 5;
-      }
-    }
-
-    final monthNames = ['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'];
-
-    return BarChart(
-      BarChartData(
-        alignment: BarChartAlignment.spaceAround,
-        maxY: maxY,
-        barTouchData: BarTouchData(
-          touchCallback: (FlTouchEvent event, barTouchResponse) {
-            setState(() {
-              if (!event.isInterestedForInteractions ||
-                  barTouchResponse == null ||
-                  barTouchResponse.spot == null) {
-                _touchedYearlyIndex = -1;
-                return;
-              }
-              _touchedYearlyIndex = barTouchResponse.spot!.touchedBarGroupIndex;
-            });
-          },
-          enabled: true,
-          handleBuiltInTouches: false,
-        ),
-        titlesData: FlTitlesData(
-          show: true,
-          bottomTitles: AxisTitles(
-            sideTitles: SideTitles(
-              showTitles: true,
-              getTitlesWidget: (double value, TitleMeta meta) {
-                final month = value.toInt();
-                if (month < 1 || month > 12) return const SizedBox.shrink();
-                return Padding(
-                  padding: const EdgeInsets.only(top: 12.0),
-                  child: Text(
-                    monthNames[month - 1], 
-                    style: GoogleFonts.inter(color: Colors.black45, fontSize: 11, fontWeight: FontWeight.bold)
-                  ),
-                );
-              },
-              reservedSize: 32,
-            ),
-          ),
-          leftTitles: AxisTitles(
-            sideTitles: SideTitles(
-              showTitles: true,
-              reservedSize: 32,
-              getTitlesWidget: (value, meta) {
-                if (value == 0 || value == maxY) return const SizedBox.shrink();
-                return Text(
-                  value.toInt().toString(), 
-                  style: GoogleFonts.inter(color: Colors.black45, fontSize: 11, fontWeight: FontWeight.w500)
-                );
-              },
-            ),
-          ),
-          topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-        ),
-        gridData: FlGridData(
-          show: true,
-          drawVerticalLine: false,
-          horizontalInterval: maxY > 20 ? 10 : 5,
-          getDrawingHorizontalLine: (value) {
-            return FlLine(color: Colors.black.withValues(alpha: 0.03), strokeWidth: 1);
-          },
-        ),
-        borderData: FlBorderData(show: false),
-        barGroups: List.generate(12, (i) {
-          final month = i + 1;
-          final isTouched = i == _touchedYearlyIndex;
-          return BarChartGroupData(
-            x: month,
-            barRods: [
-              BarChartRodData(
-                toY: (_monthsInYearSales[month] ?? 0).toDouble(),
-                gradient: LinearGradient(
-                  colors: isTouched 
-                    ? [const Color(0xFF8B0000), const Color(0xFFE53935)] 
-                    : [const Color(0xFF8B0000).withValues(alpha: 0.2), const Color(0xFF8B0000).withValues(alpha: 0.05)],
-                  begin: Alignment.bottomCenter,
-                  end: Alignment.topCenter,
-                ),
-                width: isTouched ? 32 : 24,
+                width: isTouched ? 22 : 18,
                 borderRadius: BorderRadius.circular(6),
                 backDrawRodData: BackgroundBarChartRodData(
                   show: true,
@@ -635,6 +581,97 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
       ),
     );
   }
+
+  Widget _buildYearlyTrendChart() {
+    double maxY = 500;
+    for (int i = 1; i <= 12; i++) {
+      if ((_monthsInYearSales[i] ?? 0) > maxY) {
+        maxY = (_monthsInYearSales[i] ?? 0).toDouble() + 500;
+      }
+    }
+
+    final monthNames = ['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'];
+
+    return LineChart(
+      LineChartData(
+        gridData: FlGridData(
+          show: true,
+          drawVerticalLine: false,
+          horizontalInterval: maxY / 5,
+          getDrawingHorizontalLine: (value) => FlLine(color: Colors.black.withValues(alpha: 0.03), strokeWidth: 1),
+        ),
+        titlesData: FlTitlesData(
+          bottomTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              getTitlesWidget: (value, meta) {
+                final idx = value.toInt() - 1;
+                if (idx < 0 || idx >= 12) return const SizedBox.shrink();
+                return Padding(
+                  padding: const EdgeInsets.only(top: 12),
+                  child: Text(monthNames[idx], style: GoogleFonts.inter(color: Colors.black45, fontSize: 11, fontWeight: FontWeight.bold)),
+                );
+              },
+              reservedSize: 32,
+            ),
+          ),
+          leftTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              reservedSize: 40,
+              getTitlesWidget: (value, meta) {
+                if (value == 0 || value == maxY) return const SizedBox.shrink();
+                return Text("₹${value.toInt()}", style: GoogleFonts.inter(color: Colors.black45, fontSize: 10, fontWeight: FontWeight.w500));
+              },
+            ),
+          ),
+          topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+        ),
+        borderData: FlBorderData(show: false),
+        lineTouchData: LineTouchData(
+          touchCallback: (event, response) {
+            if (response != null && response.lineBarSpots != null && response.lineBarSpots!.isNotEmpty) {
+              setState(() => _touchedYearlyIndex = response.lineBarSpots!.first.x.toInt() - 1);
+            }
+          },
+          touchTooltipData: LineTouchTooltipData(
+            getTooltipColor: (_) => AppTheme.primary,
+            getTooltipItems: (spots) => spots.map((s) => LineTooltipItem("₹${s.y.toInt()}", const TextStyle(color: Colors.white, fontWeight: FontWeight.bold))).toList(),
+          ),
+        ),
+        lineBarsData: [
+          LineChartBarData(
+            spots: List.generate(12, (i) => FlSpot(i + 1.0, (_monthsInYearSales[i + 1] ?? 0).toDouble())),
+            isCurved: true,
+            color: AppTheme.primary,
+            barWidth: 4,
+            isStrokeCapRound: true,
+            dotData: FlDotData(
+              show: true,
+              getDotPainter: (spot, percent, bar, index) => FlDotCirclePainter(
+                radius: index == _touchedYearlyIndex ? 6 : 0,
+                color: Colors.white,
+                strokeWidth: 3,
+                strokeColor: AppTheme.primary,
+              ),
+            ),
+            belowBarData: BarAreaData(
+              show: true,
+              gradient: LinearGradient(
+                colors: [AppTheme.primary.withValues(alpha: 0.3), AppTheme.primary.withValues(alpha: 0.0)],
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+              ),
+            ),
+          ),
+        ],
+        maxY: maxY,
+      ),
+    );
+  }
+
+
 
   Widget _buildWeeklyDaysChart() {
     double maxY = 5;
@@ -652,15 +689,9 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
         maxY: maxY,
         barTouchData: BarTouchData(
           touchCallback: (FlTouchEvent event, barTouchResponse) {
-            setState(() {
-              if (!event.isInterestedForInteractions ||
-                  barTouchResponse == null ||
-                  barTouchResponse.spot == null) {
-                _touchedWeeklyIndex = -1;
-                return;
-              }
-              _touchedWeeklyIndex = barTouchResponse.spot!.touchedBarGroupIndex;
-            });
+            if (barTouchResponse != null && barTouchResponse.spot != null) {
+              setState(() => _touchedWeeklyIndex = barTouchResponse.spot!.touchedBarGroupIndex);
+            }
           },
           enabled: true,
           handleBuiltInTouches: false,
@@ -720,7 +751,10 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                 gradient: LinearGradient(
                   colors: isTouched 
                     ? [const Color(0xFF8B0000), const Color(0xFFE53935)] 
-                    : [const Color(0xFF8B0000).withValues(alpha: 0.2), const Color(0xFF8B0000).withValues(alpha: 0.05)],
+                    : [
+                        _getWeeklyColor(i).withValues(alpha: 0.8),
+                        _getWeeklyColor(i).withValues(alpha: 0.4),
+                      ],
                   begin: Alignment.bottomCenter,
                   end: Alignment.topCenter,
                 ),
@@ -737,5 +771,17 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
         }),
       ),
     );
+  }
+  Color _getWeeklyColor(int index) {
+    const colors = [
+      Color(0xFFE53935), // Mon - Red
+      Color(0xFFFB8C00), // Tue - Orange
+      Color(0xFFFDD835), // Wed - Yellow
+      Color(0xFF43A047), // Thu - Green
+      Color(0xFF1E88E5), // Fri - Blue
+      Color(0xFF5E35B1), // Sat - Deep Purple
+      Color(0xFF8E24AA), // Sun - Purple
+    ];
+    return colors[index % colors.length];
   }
 }

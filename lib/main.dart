@@ -229,7 +229,6 @@ class _HomePageState extends ConsumerState<HomePage> {
                 child: GestureDetector(
                   onTap: () {
                     Haptics.medium();
-                    SoundManager.instance.playClickSound();
                     ref.read(tapCountsProvider.notifier).set({});
                   },
                   child: Container(
@@ -301,12 +300,15 @@ class _HomePageState extends ConsumerState<HomePage> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text("Magizh", style: Theme.of(context).textTheme.displayLarge),
-            ],
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text("Magizh", style: Theme.of(context).textTheme.displayLarge, overflow: TextOverflow.ellipsis),
+              ],
+            ),
           ),
+          const SizedBox(width: 12),
           GestureDetector(
             onTap: _openAdminAddProductSheet,
             child: Container(
@@ -368,7 +370,6 @@ class _HomePageState extends ConsumerState<HomePage> {
               child: GestureDetector(
                 onTap: () {
                   Haptics.light();
-                  SoundManager.instance.playClickSound();
                   ref.read(selectedCategoryProvider.notifier).val = cat;
                 },
                 child: AnimatedContainer(
@@ -467,8 +468,9 @@ class _HomePageState extends ConsumerState<HomePage> {
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Text("Selected: $selectedCount", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
-                          Text("Amount: ₹${total.toStringAsFixed(0)}", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+                          Expanded(child: Text("Selected: $selectedCount", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis)),
+                          const SizedBox(width: 12),
+                          Flexible(child: Text("Amount: ₹${total.toStringAsFixed(0)}", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis)),
                         ],
                       ),
                     ),
@@ -478,11 +480,8 @@ class _HomePageState extends ConsumerState<HomePage> {
                       child: ElevatedButton(
                         onPressed: () {
                           Haptics.light();
-                          showModalBottomSheet(
+                          showDialog(
                             context: context,
-                            isScrollControlled: true,
-                            backgroundColor: Colors.white,
-                            shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
                             builder: (context) => const CheckoutSheet(),
                           );
                         },
@@ -737,7 +736,6 @@ class ProductCard extends ConsumerWidget {
               child: GestureDetector(
                 onTap: () {
                   Haptics.medium();
-                  SoundManager.instance.playClickSound();
                   ref.read(tapCountsProvider.notifier).updateState((state) {
                     final newState = Map<dynamic, int>.from(state);
                     newState.remove(productId);

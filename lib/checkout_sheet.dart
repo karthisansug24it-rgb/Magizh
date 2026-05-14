@@ -31,6 +31,12 @@ class _CheckoutSheetState extends ConsumerState<CheckoutSheet> {
     });
   }
 
+  void _onQuickCash(double amount) {
+    Haptics.light();
+    _cashController.text = amount.toStringAsFixed(0);
+    // Listener in initState will update _cashCollected
+  }
+
   @override
   void dispose() {
     _cashController.dispose();
@@ -102,7 +108,6 @@ class _CheckoutSheetState extends ConsumerState<CheckoutSheet> {
 
       // Success
       Haptics.success();
-      SoundManager.instance.playClickSound(); // Or a specific success sound
       
       // Clear basket
       ref.read(tapCountsProvider.notifier).set({});
@@ -135,224 +140,205 @@ class _CheckoutSheetState extends ConsumerState<CheckoutSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final tapCounts = ref.watch(tapCountsProvider);
     final products = ref.watch(productsProvider);
-
-    if (tapCounts.isEmpty) {
-      return const SizedBox.shrink();
-    }
-
-    double totalAmount = 0;
-    final itemsList = tapCounts.entries.map((entry) {
+    final tapCounts = ref.watch(tapCountsProvider);
+    final totalAmount = tapCounts.entries.fold<double>(0, (sum, entry) {
       final match = products.firstWhere((p) => p["id"] == entry.key, orElse: () => {});
       final price = match["price"] is num ? (match["price"] as num).toDouble() : 0.0;
-      final name = match["name"] ?? "Unknown";
-      final lineTotal = price * entry.value;
-      totalAmount += lineTotal;
-      
-      return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8.0),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Expanded(
-              child: Text(
-                "$name  x${entry.value}",
-                style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
-              ),
-            ),
-            Text(
-              "₹${lineTotal.toStringAsFixed(0)}",
-              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
-            ),
-          ],
-        ),
-      );
-    }).toList();
+      return sum + (price * entry.value);
+    });
 
-    return Container(
-      constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.85),
-      padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                "Checkout",
-                style: GoogleFonts.inter(fontSize: 24, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
-              ),
-              IconButton(
-                icon: const Icon(Icons.close),
-                onPressed: () => Navigator.pop(context),
-              )
-            ],
-          ),
-          const SizedBox(height: 8),
-          
-          // Order Items
-          Flexible(
-            child: SingleChildScrollView(
-              child: Column(
+    return Dialog(
+      backgroundColor: Colors.white,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+      clipBehavior: Clip.antiAlias,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxWidth: 400,
+          maxHeight: MediaQuery.of(context).size.height * 0.85,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Header - Fixed
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 20, 16, 4),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  ...itemsList,
-                  const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 12.0),
-                    child: Divider(color: Color(0xFFEEEEEE), thickness: 1.5),
-                  ),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text("Total Amount", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                      Text("₹${totalAmount.toStringAsFixed(0)}", style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: AppTheme.primary)),
-                    ],
-                  ),
-                  const SizedBox(height: 32),
-                  
-                  // Payment Method
-                  const Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text("Payment Method", style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.black)),
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _PaymentMethodCard(
-                          title: "Online",
-                          icon: Icons.qr_code,
-                          isSelected: _paymentMethod == 'Online',
-                          onTap: () {
-                            Haptics.light();
-                            SoundManager.instance.playClickSound();
-                            setState(() => _paymentMethod = 'Online');
-                          },
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: _PaymentMethodCard(
-                          title: "Cash",
-                          icon: Icons.payments_outlined,
-                          isSelected: _paymentMethod == 'Offline', // "Offline" matches existing db convention
-                          onTap: () {
-                            Haptics.light();
-                            SoundManager.instance.playClickSound();
-                            setState(() => _paymentMethod = 'Offline');
-                          },
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 32),
-                  
-                  // Cash Collection UI
-                  AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 300),
-                    child: _paymentMethod == 'Offline' ? Column(
-                      key: const ValueKey('cash'),
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Divider(color: Color(0xFFEEEEEE), thickness: 1.5),
-                        const SizedBox(height: 16),
-                        const Text("Cash Received from Customer", style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.black)),
-                        const SizedBox(height: 12),
-                        TextField(
-                          controller: _cashController,
-                          keyboardType: TextInputType.number,
-                          autofocus: true,
-                          decoration: InputDecoration(
-                            hintText: "Enter amount...",
-                            prefixText: "₹ ",
-                            prefixStyle: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black),
-                            filled: true,
-                            fillColor: Colors.grey.shade50,
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade300)),
-                            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade300)),
-                            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppTheme.primary, width: 2)),
-                          ),
-                          style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-                        ),
-                        const SizedBox(height: 20),
-                        if (_cashController.text.isNotEmpty)
-                          Container(
-                            padding: const EdgeInsets.all(20),
-                            decoration: BoxDecoration(
-                              color: _cashCollected >= totalAmount ? const Color(0xFFE8F5E9) : const Color(0xFFFFEBEE),
-                              borderRadius: BorderRadius.circular(16),
-                              border: Border.all(color: _cashCollected >= totalAmount ? Colors.green.shade200 : Colors.red.shade200),
-                            ),
-                            child: Column(
-                              children: [
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Text(
-                                      _cashCollected >= totalAmount ? "Balance to Give" : "Amount Pending",
-                                      style: TextStyle(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.bold,
-                                        color: _cashCollected >= totalAmount ? Colors.green.shade800 : Colors.red.shade800,
-                                      ),
-                                    ),
-                                    Text(
-                                      _cashCollected >= totalAmount 
-                                          ? "₹${(_cashCollected - totalAmount).toStringAsFixed(0)}"
-                                          : "₹${(totalAmount - _cashCollected).toStringAsFixed(0)}",
-                                      style: TextStyle(
-                                        fontSize: 28,
-                                        fontWeight: FontWeight.w900,
-                                        color: _cashCollected >= totalAmount ? Colors.green.shade900 : Colors.red.shade900,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                if (_cashCollected >= totalAmount)
-                                  Padding(
-                                    padding: const EdgeInsets.only(top: 8.0),
-                                    child: Text(
-                                      "Give ₹${(_cashCollected - totalAmount).toStringAsFixed(0)} back to customer",
-                                      style: TextStyle(color: Colors.green.shade700, fontSize: 13, fontWeight: FontWeight.w500),
-                                    ),
-                                  ),
-                              ],
-                            ),
-                          ),
-                        const SizedBox(height: 32),
-                      ],
-                    ) : const SizedBox(key: ValueKey('none'), height: 32),
-                  ),
+                  Text("Checkout", style: GoogleFonts.inter(fontSize: 22, fontWeight: FontWeight.bold, color: AppTheme.textPrimary)),
+                  IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(context)),
                 ],
               ),
             ),
-          ),
-          
-          // Bottom Action
-          SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.only(bottom: 16.0),
+            
+            // Scrollable Content
+            Flexible(
+              child: SingleChildScrollView(
+                physics: const BouncingScrollPhysics(),
+                padding: const EdgeInsets.fromLTRB(24, 0, 24, 0),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text("Payment Method", style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.black54)),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _PaymentMethodCard(
+                            title: "Online",
+                            icon: Icons.qr_code_rounded,
+                            isSelected: _paymentMethod == 'Online',
+                            onTap: () {
+                              Haptics.light();
+                              setState(() => _paymentMethod = 'Online');
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: _PaymentMethodCard(
+                            title: "Cash",
+                            icon: Icons.payments_outlined,
+                            isSelected: _paymentMethod == 'Offline',
+                            onTap: () {
+                              Haptics.light();
+                              setState(() => _paymentMethod = 'Offline');
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                    
+                    const SizedBox(height: 20),
+                    const Text("Summary", style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.black54)),
+                    const SizedBox(height: 8),
+                    ...tapCounts.entries.map((e) {
+                      final p = products.firstWhere((pr) => pr['id'] == e.key, orElse: () => {});
+                      if (p.isEmpty) return const SizedBox.shrink();
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 6.0),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Expanded(child: Text("${p['name']} x ${e.value}", style: const TextStyle(fontSize: 14), overflow: TextOverflow.ellipsis)),
+                            Text("₹${((p['price'] as num) * e.value).toStringAsFixed(0)}", style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                          ],
+                        ),
+                      );
+                    }),
+                    
+                    const Divider(color: Color(0xFFEEEEEE), height: 24, thickness: 1),
+                    
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text("Total Amount", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                        Text("₹${totalAmount.toStringAsFixed(0)}", style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: AppTheme.primary)),
+                      ],
+                    ),
+                    
+                    const SizedBox(height: 20),
+                    
+                    if (_paymentMethod == 'Offline') ...[
+                      const Text("Cash Received", style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.black54)),
+                      const SizedBox(height: 12),
+                      
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [50, 100, 200, 300, 400, 500].map((amount) {
+                          return InkWell(
+                            onTap: () => _onQuickCash(amount.toDouble()),
+                            borderRadius: BorderRadius.circular(10),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              decoration: BoxDecoration(
+                                color: _cashCollected == amount ? AppTheme.primary : Colors.grey.shade50,
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(color: _cashCollected == amount ? AppTheme.primary : Colors.grey.shade200),
+                              ),
+                              child: Text(
+                                "₹$amount",
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 12,
+                                  color: _cashCollected == amount ? Colors.white : Colors.black87,
+                                ),
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                      
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: _cashController,
+                        keyboardType: TextInputType.number,
+                        decoration: InputDecoration(
+                          hintText: "Enter amount",
+                          prefixText: "₹ ",
+                          filled: true,
+                          fillColor: Colors.grey.shade50,
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade200)),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                        ),
+                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                      ),
+                      
+                      const SizedBox(height: 12),
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: _cashCollected >= totalAmount ? Colors.green.shade50 : Colors.red.shade50,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              _cashCollected >= totalAmount ? "Change" : "Short",
+                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: _cashCollected >= totalAmount ? Colors.green.shade700 : Colors.red.shade700),
+                            ),
+                            Text(
+                              "₹${(_cashCollected - totalAmount).abs().toStringAsFixed(0)}",
+                              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: _cashCollected >= totalAmount ? Colors.green.shade900 : Colors.red.shade900),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                    // Add bottom padding to avoid keyboard covering the content inside the scrollview
+                    SizedBox(height: MediaQuery.of(context).viewInsets.bottom > 0 ? 16 : 0),
+                  ],
+                ),
+              ),
+            ),
+            
+            // Footer - Fixed
+            Padding(
+              padding: const EdgeInsets.all(20),
               child: SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppTheme.primary,
                     foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                     elevation: 0,
-                    disabledBackgroundColor: Colors.grey.shade300,
                   ),
                   onPressed: (_isProcessing || (_paymentMethod == 'Offline' && _cashCollected < totalAmount)) ? null : _processOrder,
                   child: _isProcessing
-                      ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5))
-                      : Text("Place Order (₹${totalAmount.toStringAsFixed(0)})", style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                      ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                      : Text("Confirm Order (₹${totalAmount.toStringAsFixed(0)})", style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
                 ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

@@ -27,7 +27,6 @@ class _InventorySheetState extends ConsumerState<InventorySheet> {
 
   void _updateStock(String id, int delta, int currentStock) {
     Haptics.light();
-    SoundManager.instance.playClickSound();
     setState(() {
       int newStock = (_stockChanges[id] ?? currentStock) + delta;
       if (newStock < 0) newStock = 0;
@@ -37,7 +36,6 @@ class _InventorySheetState extends ConsumerState<InventorySheet> {
 
   void _markForDeletion(String id) {
     Haptics.medium();
-    SoundManager.instance.playClickSound();
     setState(() {
       _productsToDelete.add(id);
     });
