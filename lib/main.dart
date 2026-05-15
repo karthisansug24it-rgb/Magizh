@@ -418,7 +418,10 @@ class _HomePageState extends ConsumerState<HomePage> {
             columnCount: 2,
             child: ScaleAnimation(
               child: FadeInAnimation(
-                child: ProductCard(product: filteredProducts[index]),
+                child: ProductCard(
+                  product: filteredProducts[index],
+                  onEdit: () => _openEditProductSheet(filteredProducts[index]),
+                ),
               ),
             ),
           );
@@ -607,11 +610,90 @@ class _HomePageState extends ConsumerState<HomePage> {
       });
     }
   }
+
+  Future<void> _openEditProductSheet(Map<String, dynamic> product) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      builder: (context) => EditProductSheet(
+        product: product,
+        categories: categories,
+        onUpdate: (updates, newImagePath) => _updateProduct(product['id'], updates, newImagePath),
+        onDelete: () => _deleteProduct(product['id']),
+      ),
+    );
+  }
+
+  Future<void> _updateProduct(String id, Map<String, dynamic> updates, String? localImagePath) async {
+    try {
+      String? imageUrl = updates['image_url'];
+      if (localImagePath != null) {
+        final fileName = '${DateTime.now().millisecondsSinceEpoch}.jpg';
+        await Supabase.instance.client.storage.from('product-images').upload(fileName, File(localImagePath));
+        imageUrl = Supabase.instance.client.storage.from('product-images').getPublicUrl(fileName);
+      }
+
+      final response = await Supabase.instance.client
+          .from('products')
+          .update({...updates, if (imageUrl != null) 'image_url': imageUrl})
+          .eq('id', id)
+          .select()
+          .single();
+
+      if (mounted) {
+        ref.read(productsProvider.notifier).updateState((state) {
+          final newState = List<Map<String, dynamic>>.from(state);
+          final index = newState.indexWhere((p) => p['id'] == id);
+          if (index != -1) newState[index] = Map<String, dynamic>.from(response);
+          return newState;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Product updated successfully!')));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Update failed: $e')));
+      }
+    }
+  }
+
+  Future<void> _deleteProduct(String id) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("Delete Product"),
+        content: const Text("Are you sure you want to delete this product?"),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text("Cancel")),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true), 
+            style: TextButton.styleFrom(foregroundColor: const Color(0xFF8B0000)),
+            child: const Text("Delete")
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      try {
+        await Supabase.instance.client.from('products').update({'is_active': false}).eq('id', id);
+        if (mounted) {
+          ref.read(productsProvider.notifier).updateState((state) => state.where((p) => p['id'] != id).toList());
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Product deleted')));
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Delete failed: $e')));
+        }
+      }
+    }
+  }
 }
 
 class ProductCard extends ConsumerWidget {
   final Map<String, dynamic> product;
-  const ProductCard({super.key, required this.product});
+  final VoidCallback onEdit;
+  const ProductCard({super.key, required this.product, required this.onEdit});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -637,6 +719,10 @@ class ProductCard extends ConsumerWidget {
                       newState[productId] = (state[productId] ?? 0) + 1 >= 100 ? 0 : (state[productId] ?? 0) + 1;
                       return newState;
                     });
+                  },
+                  onLongPress: () {
+                    Haptics.medium();
+                    onEdit();
                   },
                   child: Stack(
                     fit: StackFit.expand,
@@ -867,6 +953,124 @@ class _AddProductSheetState extends State<AddProductSheet> {
               widget.onAdd(name, price, finalCategory, _selectedImage!.path);
               Navigator.pop(context);
             }, child: const Text("Add product"))),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class EditProductSheet extends StatefulWidget {
+  final Map<String, dynamic> product;
+  final List<String> categories;
+  final Function(Map<String, dynamic> updates, String? newImagePath) onUpdate;
+  final VoidCallback onDelete;
+  const EditProductSheet({super.key, required this.product, required this.categories, required this.onUpdate, required this.onDelete});
+  @override
+  State<EditProductSheet> createState() => _EditProductSheetState();
+}
+
+class _EditProductSheetState extends State<EditProductSheet> {
+  late TextEditingController _nameController;
+  late TextEditingController _priceController;
+  late TextEditingController _stockController;
+  late TextEditingController _otherCategoryController;
+  late String _category;
+  XFile? _selectedImage;
+  final ImagePicker _picker = ImagePicker();
+
+  @override
+  void initState() { 
+    super.initState(); 
+    _nameController = TextEditingController(text: widget.product['name']);
+    _priceController = TextEditingController(text: widget.product['price'].toString());
+    _stockController = TextEditingController(text: (widget.product['stock_qty'] ?? 0).toString());
+    _category = widget.product['category'] ?? "Other";
+    _otherCategoryController = TextEditingController();
+    if (!widget.categories.contains(_category)) {
+      _otherCategoryController.text = _category;
+      _category = "Other";
+    }
+  }
+
+  @override
+  void dispose() { 
+    _nameController.dispose(); 
+    _priceController.dispose(); 
+    _stockController.dispose();
+    _otherCategoryController.dispose();
+    super.dispose(); 
+  }
+
+  Future<void> _pickImage() async {
+    final image = await _picker.pickImage(source: ImageSource.gallery, imageQuality: 80);
+    if (image != null && mounted) setState(() => _selectedImage = image);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.fromLTRB(20, 20, 20, MediaQuery.of(context).viewInsets.bottom + 20),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text("Edit Product", style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
+                IconButton(
+                  icon: const Icon(Icons.delete_outline, color: Color(0xFF8B0000)),
+                  onPressed: () {
+                    Navigator.pop(context);
+                    widget.onDelete();
+                  },
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            TextField(controller: _nameController, decoration: const InputDecoration(labelText: "Product name", border: OutlineInputBorder())),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(child: TextField(controller: _priceController, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: "Price", border: OutlineInputBorder()))),
+                const SizedBox(width: 12),
+                Expanded(child: TextField(controller: _stockController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: "Stock Qty", border: OutlineInputBorder()))),
+              ],
+            ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              value: _category,
+              decoration: const InputDecoration(labelText: "Category", border: OutlineInputBorder()),
+              items: widget.categories.where((c) => c != "All").map((c) => DropdownMenuItem<String>(value: c, child: Text(c))).toList(),
+              onChanged: (value) { if (value != null) setState(() => _category = value); },
+            ),
+            if (_category == "Other") ...[
+              const SizedBox(height: 12),
+              TextField(
+                controller: _otherCategoryController,
+                decoration: const InputDecoration(labelText: "Enter category name", border: OutlineInputBorder()),
+              ),
+            ],
+            const SizedBox(height: 12),
+            SizedBox(width: double.infinity, child: OutlinedButton.icon(onPressed: _pickImage, icon: const Icon(Icons.photo_library_outlined), label: Text(_selectedImage == null ? "Change photo" : "New photo selected"))),
+            const SizedBox(height: 16),
+            SizedBox(width: double.infinity, child: ElevatedButton(style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF8B0000), foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 14)), onPressed: () {
+              final name = _nameController.text.trim();
+              final price = double.tryParse(_priceController.text.trim());
+              final stock = int.tryParse(_stockController.text.trim()) ?? 0;
+              String finalCategory = _category;
+              if (_category == "Other") {
+                finalCategory = _otherCategoryController.text.trim();
+              }
+              if (name.isEmpty || price == null || price <= 0 || (finalCategory == "Other" && finalCategory.isEmpty) || finalCategory.isEmpty) { 
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Enter valid name, price and category."))); 
+                return; 
+              }
+              widget.onUpdate({'name': name, 'price': price, 'category': finalCategory, 'stock_qty': stock}, _selectedImage?.path);
+              Navigator.pop(context);
+            }, child: const Text("Save Changes"))),
           ],
         ),
       ),
