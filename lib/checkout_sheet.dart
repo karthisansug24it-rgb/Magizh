@@ -249,7 +249,7 @@ class _CheckoutSheetState extends ConsumerState<CheckoutSheet> {
                       Wrap(
                         spacing: 8,
                         runSpacing: 8,
-                        children: [50, 100, 200, 300, 400, 500].map((amount) {
+                        children: [10, 20, 50, 100, 200, 500].map((amount) {
                           return InkWell(
                             onTap: () => _onQuickCash(amount.toDouble()),
                             borderRadius: BorderRadius.circular(10),
@@ -299,7 +299,7 @@ class _CheckoutSheetState extends ConsumerState<CheckoutSheet> {
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             Text(
-                              _cashCollected >= totalAmount ? "Change" : "Short",
+                              _cashCollected >= totalAmount ? "Balance" : "Short",
                               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: _cashCollected >= totalAmount ? Colors.green.shade700 : Colors.red.shade700),
                             ),
                             Text(

@@ -146,7 +146,6 @@ class HomePage extends ConsumerStatefulWidget {
 }
 
 class _HomePageState extends ConsumerState<HomePage> {
-  final List<String> categories = ["All", "Puff", "Samosa", "Roll", "Drinks", "Other"];
   final TextEditingController _searchController = TextEditingController();
 
   @override
@@ -192,6 +191,11 @@ class _HomePageState extends ConsumerState<HomePage> {
     final tapCounts = ref.watch(tapCountsProvider);
     final selectedCount = tapCounts.values.fold<int>(0, (sum, count) => sum + count);
 
+    // Dynamic categories from products
+    final List<String> categories = ["All"];
+    final existingCats = products.map((p) => p['category'] as String?).where((c) => c != null && c.isNotEmpty).cast<String>().toSet().toList()..sort();
+    categories.addAll(existingCats);
+
     final filteredProducts = products.where((p) {
       final matchesCategory = selectedCategory == "All" || 
           p["category"].toString().toLowerCase() == selectedCategory.toLowerCase();
@@ -206,18 +210,19 @@ class _HomePageState extends ConsumerState<HomePage> {
               children: [
                 _buildHeader(),
                 _buildSearchBar(),
-                _buildCategories(),
+                _buildCategories(categories),
                 Expanded(
                   child: isLoading 
                     ? const Center(child: CircularProgressIndicator(color: Color(0xFF8B0000)))
                     : ref.watch(errorProvider) != null
                       ? _buildErrorView()
-                      : RepaintBoundary(
-                        child: ScrollConfiguration(
-                          behavior: const ScrollBehavior().copyWith(physics: const BouncingScrollPhysics()),
-                          child: _buildProductGrid(filteredProducts),
+                      : RefreshIndicator(
+                          onRefresh: _fetchProducts,
+                          color: const Color(0xFF8B0000),
+                          child: filteredProducts.isEmpty
+                            ? _buildEmptyState()
+                            : _buildProductGrid(filteredProducts, categories),
                         ),
-                      )
                 ),
               ],
             ),
@@ -253,9 +258,10 @@ class _HomePageState extends ConsumerState<HomePage> {
           ],
         ),
       ),
-
     );
   }
+
+  Widget _buildEmptyState() => const Center(child: Text("No products found"));
 
   Widget _buildErrorView() {
     final error = ref.watch(errorProvider);
@@ -304,7 +310,7 @@ class _HomePageState extends ConsumerState<HomePage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text("Magizh", style: Theme.of(context).textTheme.displayLarge, overflow: TextOverflow.ellipsis),
+                Text("மகிழ்", style: Theme.of(context).textTheme.displayLarge, overflow: TextOverflow.ellipsis),
               ],
             ),
           ),
@@ -352,7 +358,7 @@ class _HomePageState extends ConsumerState<HomePage> {
     );
   }
 
-  Widget _buildCategories() {
+  Widget _buildCategories(List<String> categories) {
     final selectedCategory = ref.watch(selectedCategoryProvider);
     return SizedBox(
       height: 60,
@@ -405,7 +411,7 @@ class _HomePageState extends ConsumerState<HomePage> {
     );
   }
 
-  Widget _buildProductGrid(List<Map<String, dynamic>> filteredProducts) {
+  Widget _buildProductGrid(List<Map<String, dynamic>> filteredProducts, List<String> categories) {
     return AnimationLimiter(
       child: GridView.builder(
         padding: const EdgeInsets.fromLTRB(20, 10, 20, 140),
@@ -420,7 +426,7 @@ class _HomePageState extends ConsumerState<HomePage> {
               child: FadeInAnimation(
                 child: ProductCard(
                   product: filteredProducts[index],
-                  onEdit: () => _openEditProductSheet(filteredProducts[index]),
+                  onEdit: () => _openEditProductSheet(filteredProducts[index], categories),
                 ),
               ),
             ),
@@ -576,7 +582,7 @@ class _HomePageState extends ConsumerState<HomePage> {
       isScrollControlled: true,
       backgroundColor: Colors.white,
       builder: (context) => AddProductSheet(
-        categories: categories,
+        categories: ["Puff", "Samosa", "Roll", "Drinks", "Sandwich", "Other"],
         onAdd: (name, price, category, imagePath) => _saveProductOptimistically(name, price, category, imagePath),
       ),
     );
@@ -611,7 +617,7 @@ class _HomePageState extends ConsumerState<HomePage> {
     }
   }
 
-  Future<void> _openEditProductSheet(Map<String, dynamic> product) async {
+  Future<void> _openEditProductSheet(Map<String, dynamic> product, List<String> categories) async {
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -690,15 +696,47 @@ class _HomePageState extends ConsumerState<HomePage> {
   }
 }
 
-class ProductCard extends ConsumerWidget {
+class ProductCard extends ConsumerStatefulWidget {
   final Map<String, dynamic> product;
   final VoidCallback onEdit;
-  const ProductCard({super.key, required this.product, required this.onEdit});
+
+  const ProductCard({
+    super.key, 
+    required this.product, 
+    required this.onEdit,
+  });
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<ProductCard> createState() => _ProductCardState();
+}
+
+class _ProductCardState extends ConsumerState<ProductCard> {
+  late TextEditingController _qtyController;
+
+  @override
+  void initState() {
+    super.initState();
+    final count = ref.read(tapCountsProvider)[widget.product["id"]] ?? 0;
+    _qtyController = TextEditingController(text: count > 0 ? "$count" : "");
+  }
+
+  @override
+  void dispose() {
+    _qtyController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final product = widget.product;
+    final onEdit = widget.onEdit;
     final productId = product["id"];
     final count = ref.watch(tapCountsProvider)[productId] ?? 0;
+    
+    if (_qtyController.text != "$count") {
+      _qtyController.text = count > 0 ? "$count" : "";
+    }
+
     final isSelected = count > 0;
 
     return Container(
@@ -751,40 +789,49 @@ class ProductCard extends ConsumerWidget {
                           child: AnimatedScale(
                             duration: const Duration(milliseconds: 200),
                             scale: 1.0,
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFF8B0000),
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    const Text("x", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 10)),
-                                    SizedBox(
-                                      width: 25,
-                                      child: TextField(
-                                        key: ValueKey("qty-$productId-$count"),
-                                        onChanged: (val) {
-                                          final newVal = int.tryParse(val);
-                                          if (newVal != null) {
-                                            ref.read(tapCountsProvider.notifier).updateState((state) {
-                                              final newState = Map<dynamic, int>.from(state);
-                                              newState[productId] = newVal;
-                                              return newState;
-                                            });
-                                          }
-                                        },
-                                        textAlign: TextAlign.center,
-                                        keyboardType: TextInputType.number,
-                                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 12),
-                                        decoration: const InputDecoration(isDense: true, border: InputBorder.none, contentPadding: EdgeInsets.zero),
-                                        controller: TextEditingController(text: "$count"),
-                                      ),
-                                    ),
-                                  ],
+                            child: Container(
+                              width: 34,
+                              height: 34,
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF8B0000),
+                                borderRadius: BorderRadius.circular(8),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withValues(alpha: 0.15),
+                                    blurRadius: 4,
+                                    offset: const Offset(0, 2),
+                                  )
+                                ],
+                              ),
+                              child: Center(
+                                child: TextField(
+                                  key: ValueKey("qty-$productId"),
+                                  onChanged: (val) {
+                                    final newVal = int.tryParse(val);
+                                    if (newVal != null) {
+                                      ref.read(tapCountsProvider.notifier).updateState((state) {
+                                        final newState = Map<dynamic, int>.from(state);
+                                        newState[productId] = newVal;
+                                        return newState;
+                                      });
+                                    }
+                                  },
+                                  textAlign: TextAlign.center,
+                                  keyboardType: TextInputType.number,
+                                  style: const TextStyle(
+                                    color: Colors.white, 
+                                    fontWeight: FontWeight.w900, 
+                                    fontSize: 16
+                                  ),
+                                  decoration: const InputDecoration(
+                                    isDense: true, 
+                                    border: InputBorder.none, 
+                                    contentPadding: EdgeInsets.zero
+                                  ),
+                                  controller: _qtyController,
                                 ),
                               ),
+                            ),
                           ),
                         ),
                     ],
