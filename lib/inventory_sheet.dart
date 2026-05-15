@@ -104,7 +104,7 @@ class _InventorySheetState extends ConsumerState<InventorySheet> {
     }).toList();
 
     return Container(
-      height: MediaQuery.of(context).size.height * 0.85,
+      height: MediaQuery.of(context).size.height * 0.95,
       padding: const EdgeInsets.fromLTRB(20, 24, 20, 0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

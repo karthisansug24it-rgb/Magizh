@@ -412,16 +412,25 @@ class _HomePageState extends ConsumerState<HomePage> {
   }
 
   Widget _buildProductGrid(List<Map<String, dynamic>> filteredProducts, List<String> categories) {
+    final width = MediaQuery.of(context).size.width;
+    int crossAxisCount = width > 1200 ? 6 : width > 900 ? 5 : width > 600 ? 4 : 2;
+    double aspectRatio = width > 600 ? 0.85 : 0.78;
+
     return AnimationLimiter(
       child: GridView.builder(
         padding: const EdgeInsets.fromLTRB(20, 10, 20, 140),
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 2, childAspectRatio: 0.78, crossAxisSpacing: 15, mainAxisSpacing: 15),
+        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: crossAxisCount, 
+          childAspectRatio: aspectRatio, 
+          crossAxisSpacing: 15, 
+          mainAxisSpacing: 15
+        ),
         itemCount: filteredProducts.length,
         itemBuilder: (context, index) {
           return AnimationConfiguration.staggeredGrid(
             position: index,
             duration: const Duration(milliseconds: 375),
-            columnCount: 2,
+            columnCount: crossAxisCount,
             child: ScaleAnimation(
               child: FadeInAnimation(
                 child: ProductCard(
@@ -525,6 +534,14 @@ class _HomePageState extends ConsumerState<HomePage> {
                       showModalBottomSheet(
                         context: context,
                         isScrollControlled: true,
+                        useSafeArea: true,
+                        constraints: BoxConstraints(
+                          maxWidth: MediaQuery.of(context).size.width > 900 
+                              ? 800 
+                              : MediaQuery.of(context).size.width > 600 
+                                  ? MediaQuery.of(context).size.width * 0.85
+                                  : double.infinity,
+                        ),
                         backgroundColor: Colors.white,
                         shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
                         builder: (context) => const InventorySheet(),

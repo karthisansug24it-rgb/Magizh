@@ -502,7 +502,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
               ),
             )
           else
-            SizedBox(height: 180, child: chart),
+            SizedBox(height: 300, child: chart),
         ],
       ),
     );
@@ -602,7 +602,10 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                 gradient: LinearGradient(
                   colors: isTouched 
                     ? [const Color(0xFF8B0000), const Color(0xFFE53935)] 
-                    : [const Color(0xFF8B0000).withValues(alpha: 0.5), const Color(0xFF8B0000).withValues(alpha: 0.2)],
+                    : [
+                        _getRainbowColor(i).withValues(alpha: 0.8),
+                        _getRainbowColor(i).withValues(alpha: 0.4),
+                      ],
                   begin: Alignment.bottomCenter,
                   end: Alignment.topCenter,
                 ),
@@ -699,7 +702,17 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
           LineChartBarData(
             spots: List.generate(12, (i) => FlSpot(i + 1.0, (_monthsInYearSales[i + 1] ?? 0).toDouble())),
             isCurved: true,
-            color: AppTheme.primary,
+            gradient: const LinearGradient(
+              colors: [
+                Colors.purple,
+                Colors.indigo,
+                Colors.blue,
+                Colors.green,
+                Colors.yellow,
+                Colors.orange,
+                Colors.red,
+              ],
+            ),
             barWidth: 4,
             isStrokeCapRound: true,
             dotData: FlDotData(
@@ -708,13 +721,19 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                 radius: index == _touchedYearlyIndex ? 6 : 0,
                 color: Colors.white,
                 strokeWidth: 3,
-                strokeColor: AppTheme.primary,
+                strokeColor: _getRainbowColor(index),
               ),
             ),
             belowBarData: BarAreaData(
               show: true,
               gradient: LinearGradient(
-                colors: [AppTheme.primary.withValues(alpha: 0.3), AppTheme.primary.withValues(alpha: 0.0)],
+                colors: [
+                  Colors.purple.withValues(alpha: 0.3),
+                  Colors.blue.withValues(alpha: 0.3),
+                  Colors.green.withValues(alpha: 0.3),
+                  Colors.orange.withValues(alpha: 0.3),
+                  Colors.red.withValues(alpha: 0.0),
+                ],
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
               ),
@@ -845,6 +864,19 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
       ),
     );
   }
+  Color _getRainbowColor(int index) {
+    const colors = [
+      Colors.red,
+      Colors.orange,
+      Colors.amber,
+      Colors.green,
+      Colors.blue,
+      Colors.indigo,
+      Colors.purple,
+    ];
+    return colors[index % colors.length];
+  }
+
   Color _getWeeklyColor(int index) {
     const colors = [
       Color(0xFFE53935), // Mon - Red
