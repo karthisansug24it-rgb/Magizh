@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'main.dart'; // To access productsProvider, SoundManager, Haptics
+import 'theme/app_theme.dart';
 
 class InventorySheet extends ConsumerStatefulWidget {
   const InventorySheet({super.key});
@@ -111,12 +112,12 @@ class _InventorySheetState extends ConsumerState<InventorySheet> {
         children: [
           const Text(
             "Inventory",
-            style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.black87),
+            style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: AppTheme.primary),
           ),
           const SizedBox(height: 4),
-          const Text(
+          Text(
             "Adjust quantities and upload",
-            style: TextStyle(fontSize: 14, color: Colors.black),
+            style: TextStyle(fontSize: 14, color: AppTheme.primary.withValues(alpha: 0.7)),
           ),
           const SizedBox(height: 16),
           // Search Bar
@@ -131,7 +132,7 @@ class _InventorySheetState extends ConsumerState<InventorySheet> {
               onChanged: (val) => setState(() => _searchQuery = val),
               decoration: const InputDecoration(
                 hintText: "Search products...",
-                prefixIcon: Icon(Icons.search, color: Colors.black),
+                prefixIcon: Icon(Icons.search, color: AppTheme.primary),
                 border: InputBorder.none,
                 contentPadding: EdgeInsets.symmetric(vertical: 14),
               ),
@@ -166,8 +167,8 @@ class _InventorySheetState extends ConsumerState<InventorySheet> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(p['name'], style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
-                          Text(p['category'] ?? 'N/A', style: const TextStyle(color: Colors.black, fontSize: 13)),
+                          Text(p['name'], style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16, color: Colors.black)),
+                          Text(p['category'] ?? 'N/A', style: TextStyle(color: AppTheme.primary.withValues(alpha: 0.7), fontSize: 13)),
                         ],
                       ),
                     ),
@@ -175,7 +176,7 @@ class _InventorySheetState extends ConsumerState<InventorySheet> {
                     Row(
                       children: [
                         IconButton(
-                          icon: const Icon(Icons.remove_circle_outline, color: Colors.black),
+                          icon: const Icon(Icons.remove_circle_outline, color: AppTheme.primary),
                           onPressed: () => _updateStock(id, -1, originalStock),
                         ),
                         SizedBox(
@@ -197,15 +198,15 @@ class _InventorySheetState extends ConsumerState<InventorySheet> {
                               enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: Colors.grey.shade300)),
                             ),
                             controller: TextEditingController(text: "$displayStock"),
-                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.black),
                           ),
                         ),
                         IconButton(
-                          icon: const Icon(Icons.add_circle_outline, color: Colors.black),
+                          icon: const Icon(Icons.add_circle_outline, color: AppTheme.primary),
                           onPressed: () => _updateStock(id, 1, originalStock),
                         ),
                         IconButton(
-                          icon: const Icon(Icons.delete_outline, color: Color(0xFF8B0000)),
+                          icon: const Icon(Icons.delete_outline, color: AppTheme.primary),
                           onPressed: () => _markForDeletion(id),
                         ),
                       ],
@@ -227,7 +228,7 @@ class _InventorySheetState extends ConsumerState<InventorySheet> {
                       width: double.infinity,
                       child: ElevatedButton.icon(
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF8B0000),
+                          backgroundColor: AppTheme.primary,
                           foregroundColor: Colors.white,
                           padding: const EdgeInsets.symmetric(vertical: 14),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -244,7 +245,7 @@ class _InventorySheetState extends ConsumerState<InventorySheet> {
                     width: double.infinity,
                     child: ElevatedButton.icon(
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF8B0000),
+                        backgroundColor: AppTheme.primary,
                         foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(vertical: 14),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -348,19 +349,19 @@ class _AddProductsToInventorySheetState extends State<AddProductsToInventoryShee
             style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 4),
-          const Text(
+          Text(
             "Pick snacks to restore in inventory",
-            style: TextStyle(color: Colors.black, fontSize: 14),
+            style: TextStyle(color: AppTheme.primary.withValues(alpha: 0.7), fontSize: 14),
           ),
           const SizedBox(height: 16),
           Expanded(
             child: _isLoading
-                ? const Center(child: CircularProgressIndicator(color: Color(0xFF8B0000)))
+                ? const Center(child: CircularProgressIndicator(color: AppTheme.primary))
                 : _inactiveProducts.isEmpty
-                    ? const Center(child: Text("No inactive products found.", style: TextStyle(color: Colors.black)))
+                    ? const Center(child: Text("No inactive products found.", style: TextStyle(color: AppTheme.primary)))
                     : ListView.separated(
                         itemCount: _inactiveProducts.length,
-                        separatorBuilder: (context, index) => const Divider(height: 1, color: Colors.black),
+                        separatorBuilder: (context, index) => Divider(height: 1, color: Colors.grey.shade300),
                         itemBuilder: (context, index) {
                           final p = _inactiveProducts[index];
                           final id = p['id'];
@@ -368,9 +369,9 @@ class _AddProductsToInventorySheetState extends State<AddProductsToInventoryShee
 
                           return ListTile(
                             contentPadding: EdgeInsets.zero,
-                            leading: const Icon(Icons.fastfood_outlined, color: Colors.black),
-                            title: Text(p['name'], style: TextStyle(color: isSelected ? Colors.black : Colors.black)),
-                            subtitle: Text(p['category'] ?? 'N/A', style: const TextStyle(color: Colors.black)),
+                            leading: const Icon(Icons.fastfood_outlined, color: AppTheme.primary),
+                            title: Text(p['name'], style: TextStyle(color: isSelected ? AppTheme.primary : AppTheme.primary)),
+                            subtitle: Text(p['category'] ?? 'N/A', style: const TextStyle(color: AppTheme.primary)),
                             trailing: Checkbox(
                               value: isSelected,
                               activeColor: Colors.grey.shade400,
@@ -405,7 +406,7 @@ class _AddProductsToInventorySheetState extends State<AddProductsToInventoryShee
                 child: ElevatedButton(
                   style: ElevatedButton.styleFrom(
                     backgroundColor: _selectedIds.isEmpty ? Colors.grey.shade300 : const Color(0xFFE0E0E0),
-                    foregroundColor: _selectedIds.isEmpty ? Colors.grey.shade500 : Colors.black87,
+                    foregroundColor: _selectedIds.isEmpty ? Colors.grey.shade500 : AppTheme.primary,
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
                     elevation: 0,
@@ -423,3 +424,4 @@ class _AddProductsToInventorySheetState extends State<AddProductsToInventoryShee
     );
   }
 }
+

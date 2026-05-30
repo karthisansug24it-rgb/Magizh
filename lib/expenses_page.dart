@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'theme/app_theme.dart';
 
 // Simple notifiers to hold the data
 class ExpensesListNotifier extends Notifier<List<Map<String, dynamic>>> {
@@ -73,34 +74,34 @@ class _ExpensesPageState extends ConsumerState<ExpensesPage> {
     final isLoading = ref.watch(isExpensesLoadingProvider);
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF8F9FA),
+      backgroundColor: Colors.white,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF8B0000),
-        foregroundColor: Colors.white,
-        title: const Text("Expense", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        backgroundColor: Colors.white,
+        foregroundColor: AppTheme.primary,
+        title: const Text("Expense", style: TextStyle(color: AppTheme.primary, fontWeight: FontWeight.bold)),
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white),
+          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: AppTheme.primary),
           onPressed: () => Navigator.pop(context),
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh),
+            icon: const Icon(Icons.refresh, color: AppTheme.primary),
             onPressed: _fetchData,
           )
         ],
       ),
       body: isLoading
-          ? const Center(child: CircularProgressIndicator(color: Color(0xFF8B0000)))
+          ? const Center(child: CircularProgressIndicator(color: AppTheme.primary))
           : expenses.isEmpty
               ? Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const Icon(Icons.receipt_long_outlined, size: 80, color: Colors.black),
+                      const Icon(Icons.receipt_long_outlined, size: 80, color: AppTheme.primary),
                       const SizedBox(height: 16),
-                      const Text("No orders found", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black)),
+                      const Text("No orders found", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.primary)),
                       const SizedBox(height: 8),
-                      TextButton(onPressed: _fetchData, child: const Text("Try Again", style: TextStyle(color: Color(0xFF8B0000)))),
+                      TextButton(onPressed: _fetchData, child: const Text("Try Again", style: TextStyle(color: AppTheme.primary))),
                     ],
                   ),
                 )
@@ -159,7 +160,7 @@ class _ExpenseCardState extends State<ExpenseCard> {
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.05),
+              color: Colors.white.withValues(alpha: 0.05),
               blurRadius: 10,
               offset: const Offset(0, 4),
             )
@@ -187,7 +188,7 @@ class _ExpenseCardState extends State<ExpenseCard> {
                               style: const TextStyle(
                                 fontWeight: FontWeight.w900,
                                 fontSize: 22,
-                                color: Color(0xFF8B0000),
+                                color: AppTheme.primary,
                               ),
                             ),
                           ),
@@ -212,14 +213,14 @@ class _ExpenseCardState extends State<ExpenseCard> {
                       const SizedBox(height: 4),
                       Text(
                         "$dayName, $timeStr • ${items.length} items",
-                        style: const TextStyle(fontSize: 12, color: Colors.black54),
+                        style: TextStyle(fontSize: 12, color: AppTheme.primary.withValues(alpha: 0.7)),
                       ),
                     ],
                   ),
                 ),
                 Icon(
                   _isExpanded ? Icons.expand_less_rounded : Icons.expand_more_rounded,
-                  color: Colors.black38,
+                  color: AppTheme.primary.withValues(alpha: 0.6),
                 ),
               ],
             ),
@@ -238,14 +239,14 @@ class _ExpenseCardState extends State<ExpenseCard> {
                       Expanded(
                         child: Text(
                           item['product_name'] ?? 'Unknown',
-                          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: Colors.black),
+                          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: AppTheme.primary),
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
                       const SizedBox(width: 8),
                       Text(
                         "x${item['qty'] ?? 1}",
-                        style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF8B0000), fontSize: 14),
+                        style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.primary, fontSize: 14),
                       ),
                     ],
                   ),
@@ -254,7 +255,7 @@ class _ExpenseCardState extends State<ExpenseCard> {
               const SizedBox(height: 12),
               Text(
                 "Date: $dateStrFormatted",
-                style: const TextStyle(color: Colors.black45, fontSize: 12, fontStyle: FontStyle.italic),
+                style: TextStyle(color: AppTheme.primary.withValues(alpha: 0.6), fontSize: 12, fontStyle: FontStyle.italic),
               ),
             ],
           ],
@@ -263,3 +264,4 @@ class _ExpenseCardState extends State<ExpenseCard> {
     );
   }
 }
+

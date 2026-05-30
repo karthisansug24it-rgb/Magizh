@@ -182,7 +182,7 @@ class _CheckoutSheetState extends ConsumerState<CheckoutSheet> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text("Payment Method", style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.black54)),
+                    Text("Payment Method", style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppTheme.primary.withValues(alpha: 0.7))),
                     const SizedBox(height: 12),
                     Row(
                       children: [
@@ -213,7 +213,7 @@ class _CheckoutSheetState extends ConsumerState<CheckoutSheet> {
                     ),
                     
                     const SizedBox(height: 20),
-                    const Text("Summary", style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.black54)),
+                    Text("Summary", style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppTheme.primary.withValues(alpha: 0.7))),
                     const SizedBox(height: 8),
                     ...tapCounts.entries.map((e) {
                       final p = products.firstWhere((pr) => pr['id'] == e.key, orElse: () => {});
@@ -243,7 +243,7 @@ class _CheckoutSheetState extends ConsumerState<CheckoutSheet> {
                     const SizedBox(height: 20),
                     
                     if (_paymentMethod == 'Offline') ...[
-                      const Text("Cash Received", style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.black54)),
+                      Text("Cash Received", style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppTheme.primary.withValues(alpha: 0.7))),
                       const SizedBox(height: 12),
                       
                       Wrap(
@@ -265,7 +265,7 @@ class _CheckoutSheetState extends ConsumerState<CheckoutSheet> {
                                 style: TextStyle(
                                   fontWeight: FontWeight.bold,
                                   fontSize: 12,
-                                  color: _cashCollected == amount ? Colors.white : Colors.black87,
+                                  color: _cashCollected == amount ? Colors.white : AppTheme.primary,
                                 ),
                               ),
                             ),
@@ -374,12 +374,12 @@ class _PaymentMethodCard extends StatelessWidget {
         ),
         child: Column(
           children: [
-            Icon(icon, color: isSelected ? AppTheme.primary : Colors.black, size: 28),
+            Icon(icon, color: isSelected ? AppTheme.primary : AppTheme.primary.withValues(alpha: 0.7), size: 28),
             const SizedBox(height: 8),
             Text(
               title,
               style: TextStyle(
-                color: isSelected ? AppTheme.primary : Colors.black,
+                color: isSelected ? AppTheme.primary : AppTheme.primary.withValues(alpha: 0.7),
                 fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
               ),
             ),
@@ -389,3 +389,4 @@ class _PaymentMethodCard extends StatelessWidget {
     );
   }
 }
+

@@ -167,9 +167,9 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
         return Theme(
           data: Theme.of(context).copyWith(
             colorScheme: const ColorScheme.light(
-              primary: Color(0xFF8B0000), // header background color
+              primary: AppTheme.primary, // header background color
               onPrimary: Colors.white, // header text color
-              onSurface: Colors.black, // body text color
+              onSurface: AppTheme.primary, // body text color
             ),
           ),
           child: child!,
@@ -187,28 +187,28 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF8F9FA),
+      backgroundColor: Colors.white,
       appBar: AppBar(
-        title: const Text("Analytics & Tracker", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
-        backgroundColor: const Color(0xFF8B0000),
+        title: const Text("Analytics & Tracker", style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.primary)),
+        backgroundColor: Colors.white,
         elevation: 0,
         centerTitle: true,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white),
+          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: AppTheme.primary),
           onPressed: () => Navigator.pop(context),
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh, color: Colors.white),
+            icon: const Icon(Icons.refresh, color: AppTheme.primary),
             onPressed: _fetchData,
           )
         ],
       ),
       body: _isLoading 
-        ? const Center(child: CircularProgressIndicator(color: Color(0xFF8B0000)))
+        ? const Center(child: CircularProgressIndicator(color: AppTheme.primary))
         : RefreshIndicator(
             onRefresh: _fetchData,
-            color: const Color(0xFF8B0000),
+            color: AppTheme.primary,
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(20),
               physics: const AlwaysScrollableScrollPhysics(),
@@ -266,7 +266,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
   Widget _buildSectionTitle(String title) {
     return Text(
       title,
-      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black),
+      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.primary),
     );
   }
 
@@ -279,9 +279,9 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
         color: Colors.white,
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
-          BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 4))
+          BoxShadow(color: Colors.white.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 4))
         ],
-        border: Border.all(color: const Color(0xFF8B0000).withValues(alpha: 0.1)),
+        border: Border.all(color: AppTheme.primary.withValues(alpha: 0.1)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -291,18 +291,18 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF8B0000).withValues(alpha: 0.1),
+                  color: AppTheme.primary.withValues(alpha: 0.1),
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(Icons.account_balance_wallet, color: Color(0xFF8B0000), size: 28),
+                child: const Icon(Icons.account_balance_wallet, color: AppTheme.primary, size: 28),
               ),
               const SizedBox(width: 16),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text("Current Month Salary", style: TextStyle(fontSize: 14, color: Colors.black54, fontWeight: FontWeight.w600)),
-                    Text("$monthName Tracker", style: const TextStyle(fontSize: 12, color: Colors.black45)),
+                    Text("Current Month Salary", style: TextStyle(fontSize: 14, color: AppTheme.primary.withValues(alpha: 0.7), fontWeight: FontWeight.w600)),
+                    Text("$monthName Tracker", style: TextStyle(fontSize: 12, color: AppTheme.primary.withValues(alpha: 0.6))),
                   ],
                 ),
               ),
@@ -311,7 +311,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
           const SizedBox(height: 20),
           Text(
             "₹${_monthlyRevenue.toInt()}",
-            style: const TextStyle(fontSize: 42, fontWeight: FontWeight.w900, color: Color(0xFF8B0000), letterSpacing: -1),
+            style: const TextStyle(fontSize: 42, fontWeight: FontWeight.w900, color: AppTheme.primary, letterSpacing: -1),
           ),
           const SizedBox(height: 8),
           Row(
@@ -331,16 +331,16 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF8B0000).withValues(alpha: 0.1),
+                  color: AppTheme.primary.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: const Row(
                   children: [
-                    Icon(Icons.trending_up, color: Color(0xFF8B0000), size: 14),
+                    Icon(Icons.trending_up, color: AppTheme.primary, size: 14),
                     SizedBox(width: 4),
                     Text(
                       "Growth",
-                      style: TextStyle(color: Color(0xFF8B0000), fontWeight: FontWeight.bold, fontSize: 12),
+                      style: TextStyle(color: AppTheme.primary, fontWeight: FontWeight.bold, fontSize: 12),
                     ),
                   ],
                 ),
@@ -360,7 +360,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
         color: Colors.white,
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
-          BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 4))
+          BoxShadow(color: Colors.white.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 4))
         ],
       ),
       child: Column(
@@ -370,12 +370,12 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
             alignment: WrapAlignment.spaceBetween,
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              const Text("Search by Date", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black)),
+              const Text("Search by Date", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.primary)),
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   IconButton(
-                    icon: const Icon(Icons.chevron_left, color: Color(0xFF8B0000)),
+                    icon: const Icon(Icons.chevron_left, color: AppTheme.primary),
                     onPressed: _searchedDate == null ? null : () {
                       final newDate = _searchedDate!.subtract(const Duration(days: 1));
                       setState(() => _searchedDate = newDate);
@@ -386,11 +386,11 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                     onPressed: _pickDate,
                     child: Text(
                       _searchedDate == null ? "Select Date" : DateFormat('EEE, d MMM').format(_searchedDate!), 
-                      style: const TextStyle(color: Color(0xFF8B0000), fontWeight: FontWeight.bold)
+                      style: const TextStyle(color: AppTheme.primary, fontWeight: FontWeight.bold)
                     ),
                   ),
                   IconButton(
-                    icon: const Icon(Icons.chevron_right, color: Color(0xFF8B0000)),
+                    icon: const Icon(Icons.chevron_right, color: AppTheme.primary),
                     onPressed: _searchedDate == null ? null : () {
                       final newDate = _searchedDate!.add(const Duration(days: 1));
                       if (newDate.isAfter(DateTime.now())) return;
@@ -428,15 +428,15 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(icon, size: 16, color: Colors.black54),
+              Icon(icon, size: 16, color: AppTheme.primary.withValues(alpha: 0.7)),
               const SizedBox(width: 4),
-              Flexible(child: Text(label, style: const TextStyle(fontSize: 12, color: Colors.black54), overflow: TextOverflow.ellipsis)),
+              Flexible(child: Text(label, style: TextStyle(fontSize: 12, color: AppTheme.primary.withValues(alpha: 0.7)), overflow: TextOverflow.ellipsis)),
             ],
           ),
           const SizedBox(height: 4),
           FittedBox(
             fit: BoxFit.scaleDown,
-            child: Text(value, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: Colors.black)),
+            child: Text(value, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: AppTheme.primary)),
           ),
         ],
       ),
@@ -451,12 +451,12 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
         color: Colors.white,
         borderRadius: BorderRadius.circular(28),
         boxShadow: [
-          BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 30, offset: const Offset(0, 10))
+          BoxShadow(color: Colors.white.withValues(alpha: 0.03), blurRadius: 30, offset: const Offset(0, 10))
         ],
       ),
       child: Column(
         children: [
-          Text(subtitle, style: const TextStyle(fontSize: 14, color: Colors.black54, fontWeight: FontWeight.w600)),
+          Text(subtitle, style: TextStyle(fontSize: 14, color: AppTheme.primary.withValues(alpha: 0.7), fontWeight: FontWeight.w600)),
           const SizedBox(height: 20),
           if (touchedIndex != -1)
             TweenAnimationBuilder<double>(
@@ -466,7 +466,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                 opacity: val,
                 child: Column(
                 children: [
-                  Text(label, style: const TextStyle(fontSize: 14, color: Colors.black45, fontWeight: FontWeight.w500)),
+                  Text(label, style: TextStyle(fontSize: 14, color: AppTheme.primary.withValues(alpha: 0.6), fontWeight: FontWeight.w500)),
                   const SizedBox(height: 8),
                   TweenAnimationBuilder<double>(
                     duration: const Duration(milliseconds: 500),
@@ -477,7 +477,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                       final suffix = value.contains('Orders') ? ' Orders' : '';
                       return Text(
                         "$prefix${val.toStringAsFixed(0)}$suffix", 
-                        style: GoogleFonts.inter(fontSize: 32, fontWeight: FontWeight.w900, color: const Color(0xFF8B0000), letterSpacing: -1)
+                        style: GoogleFonts.inter(fontSize: 32, fontWeight: FontWeight.w900, color: AppTheme.primary, letterSpacing: -1)
                       );
                     },
                   ),
@@ -542,7 +542,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                   padding: const EdgeInsets.only(top: 12.0),
                   child: Text(
                     value.toInt().toString(), 
-                    style: GoogleFonts.inter(color: Colors.black45, fontSize: 10, fontWeight: FontWeight.bold)
+                    style: GoogleFonts.inter(color: AppTheme.primary.withValues(alpha: 0.6), fontSize: 10, fontWeight: FontWeight.bold)
                   ),
                 );
               },
@@ -557,7 +557,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                 if (value == 0 || value == maxY) return const SizedBox.shrink();
                 return Text(
                   value.toInt().toString(), 
-                  style: GoogleFonts.inter(color: Colors.black45, fontSize: 11, fontWeight: FontWeight.w500)
+                  style: GoogleFonts.inter(color: AppTheme.primary.withValues(alpha: 0.6), fontSize: 11, fontWeight: FontWeight.w500)
                 );
               },
             ),
@@ -570,7 +570,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
           drawVerticalLine: false,
           horizontalInterval: maxY > 10 ? 5 : 2,
           getDrawingHorizontalLine: (value) {
-            return FlLine(color: Colors.black.withValues(alpha: 0.03), strokeWidth: 1);
+            return FlLine(color: Colors.white.withValues(alpha: 0.03), strokeWidth: 1);
           },
         ),
         extraLinesData: ExtraLinesData(
@@ -584,7 +584,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                 show: true,
                 alignment: Alignment.topRight,
                 padding: const EdgeInsets.only(right: 8, bottom: 4),
-                style: const TextStyle(color: Colors.black26, fontSize: 10, fontWeight: FontWeight.bold),
+                style: TextStyle(color: AppTheme.primary.withValues(alpha: 0.35), fontSize: 10, fontWeight: FontWeight.bold),
                 labelResolver: (_) => "AVG",
               ),
             ),
@@ -601,7 +601,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                 toY: (_daysInMonthSales[day] ?? 0).toDouble(),
                 gradient: LinearGradient(
                   colors: isTouched 
-                    ? [const Color(0xFF8B0000), const Color(0xFFE53935)] 
+                    ? [AppTheme.primary, const Color(0xFFE53935)] 
                     : [
                         _getRainbowColor(i).withValues(alpha: 0.8),
                         _getRainbowColor(i).withValues(alpha: 0.4),
@@ -614,7 +614,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                 backDrawRodData: BackgroundBarChartRodData(
                   show: true,
                   toY: maxY,
-                  color: Colors.black.withValues(alpha: 0.01),
+                  color: Colors.white.withValues(alpha: 0.01),
                 ),
               ),
             ],
@@ -640,7 +640,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
           show: true,
           drawVerticalLine: false,
           horizontalInterval: maxY / 5,
-          getDrawingHorizontalLine: (value) => FlLine(color: Colors.black.withValues(alpha: 0.03), strokeWidth: 1),
+          getDrawingHorizontalLine: (value) => FlLine(color: Colors.white.withValues(alpha: 0.03), strokeWidth: 1),
         ),
         titlesData: FlTitlesData(
           bottomTitles: AxisTitles(
@@ -651,7 +651,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                 if (idx < 0 || idx >= 12) return const SizedBox.shrink();
                 return Padding(
                   padding: const EdgeInsets.only(top: 12),
-                  child: Text(monthNames[idx], style: GoogleFonts.inter(color: Colors.black45, fontSize: 11, fontWeight: FontWeight.bold)),
+                  child: Text(monthNames[idx], style: GoogleFonts.inter(color: AppTheme.primary.withValues(alpha: 0.6), fontSize: 11, fontWeight: FontWeight.bold)),
                 );
               },
               reservedSize: 32,
@@ -663,7 +663,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
               reservedSize: 40,
               getTitlesWidget: (value, meta) {
                 if (value == 0 || value == maxY) return const SizedBox.shrink();
-                return Text("₹${value.toInt()}", style: GoogleFonts.inter(color: Colors.black45, fontSize: 10, fontWeight: FontWeight.w500));
+                return Text("₹${value.toInt()}", style: GoogleFonts.inter(color: AppTheme.primary.withValues(alpha: 0.6), fontSize: 10, fontWeight: FontWeight.w500));
               },
             ),
           ),
@@ -783,7 +783,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                   padding: const EdgeInsets.only(top: 12.0),
                   child: Text(
                     dayNames[day - 1], 
-                    style: GoogleFonts.inter(color: Colors.black45, fontSize: 11, fontWeight: FontWeight.bold)
+                    style: GoogleFonts.inter(color: AppTheme.primary.withValues(alpha: 0.6), fontSize: 11, fontWeight: FontWeight.bold)
                   ),
                 );
               },
@@ -798,7 +798,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                 if (value == 0 || value == maxY) return const SizedBox.shrink();
                 return Text(
                   value.toInt().toString(), 
-                  style: GoogleFonts.inter(color: Colors.black45, fontSize: 10, fontWeight: FontWeight.bold)
+                  style: GoogleFonts.inter(color: AppTheme.primary.withValues(alpha: 0.6), fontSize: 10, fontWeight: FontWeight.bold)
                 );
               },
             ),
@@ -811,7 +811,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
           drawVerticalLine: false,
           horizontalInterval: maxY > 100 ? 100 : (maxY > 20 ? 10 : 5),
           getDrawingHorizontalLine: (value) {
-            return FlLine(color: Colors.black.withValues(alpha: 0.03), strokeWidth: 1);
+            return FlLine(color: Colors.white.withValues(alpha: 0.03), strokeWidth: 1);
           },
         ),
         extraLinesData: ExtraLinesData(
@@ -825,7 +825,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                 show: true,
                 alignment: Alignment.topRight,
                 padding: const EdgeInsets.only(right: 8, bottom: 4),
-                style: const TextStyle(color: Colors.black26, fontSize: 10, fontWeight: FontWeight.bold),
+                style: TextStyle(color: AppTheme.primary.withValues(alpha: 0.35), fontSize: 10, fontWeight: FontWeight.bold),
                 labelResolver: (_) => "AVG",
               ),
             ),
@@ -842,7 +842,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                 toY: (_daysOfWeekSales[day] ?? 0).toDouble(),
                 gradient: LinearGradient(
                   colors: isTouched 
-                    ? [const Color(0xFF8B0000), const Color(0xFFE53935)] 
+                    ? [AppTheme.primary, const Color(0xFFE53935)] 
                     : [
                         _getWeeklyColor(i).withValues(alpha: 0.8),
                         _getWeeklyColor(i).withValues(alpha: 0.4),
@@ -855,7 +855,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                 backDrawRodData: BackgroundBarChartRodData(
                   show: true,
                   toY: maxY,
-                  color: Colors.black.withValues(alpha: 0.01),
+                  color: Colors.white.withValues(alpha: 0.01),
                 ),
               ),
             ],
@@ -890,3 +890,4 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
     return colors[index % colors.length];
   }
 }
+
