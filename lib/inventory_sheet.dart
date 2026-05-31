@@ -149,6 +149,7 @@ class _InventorySheetState extends ConsumerState<InventorySheet> {
                 final id = p['id'];
                 final originalStock = (p['stock_qty'] as num?)?.toInt() ?? 0;
                 final displayStock = _stockChanges[id] ?? originalStock;
+                final alwaysAvailable = isAlwaysAvailableProduct(p);
 
                 return Row(
                   children: [
@@ -173,44 +174,55 @@ class _InventorySheetState extends ConsumerState<InventorySheet> {
                       ),
                     ),
                     // Controls
-                    Row(
-                      children: [
-                        IconButton(
-                          icon: const Icon(Icons.remove_circle_outline, color: AppTheme.primary),
-                          onPressed: () => _updateStock(id, -1, originalStock),
-                        ),
-                        SizedBox(
-                          width: 55,
-                          child: TextField(
-                            key: ValueKey("$id-$displayStock"),
-                            onChanged: (val) {
-                              final newVal = int.tryParse(val);
-                              if (newVal != null) {
-                                setState(() => _stockChanges[id] = newVal);
-                              }
-                            },
-                            textAlign: TextAlign.center,
-                            keyboardType: TextInputType.number,
-                            decoration: InputDecoration(
-                              isDense: true,
-                              contentPadding: const EdgeInsets.symmetric(vertical: 8),
-                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: Colors.grey.shade300)),
-                              enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: Colors.grey.shade300)),
-                            ),
-                            controller: TextEditingController(text: "$displayStock"),
-                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.black),
+                    if (alwaysAvailable)
+                      Row(
+                        children: [
+                          const SizedBox(width: 110),
+                          IconButton(
+                            icon: const Icon(Icons.delete_outline, color: AppTheme.primary),
+                            onPressed: () => _markForDeletion(id),
                           ),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.add_circle_outline, color: AppTheme.primary),
-                          onPressed: () => _updateStock(id, 1, originalStock),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.delete_outline, color: AppTheme.primary),
-                          onPressed: () => _markForDeletion(id),
-                        ),
-                      ],
-                    )
+                        ],
+                      )
+                    else
+                      Row(
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.remove_circle_outline, color: AppTheme.primary),
+                            onPressed: () => _updateStock(id, -1, originalStock),
+                          ),
+                          SizedBox(
+                            width: 55,
+                            child: TextField(
+                              key: ValueKey("$id-$displayStock"),
+                              onChanged: (val) {
+                                final newVal = int.tryParse(val);
+                                if (newVal != null) {
+                                  setState(() => _stockChanges[id] = newVal);
+                                }
+                              },
+                              textAlign: TextAlign.center,
+                              keyboardType: TextInputType.number,
+                              decoration: InputDecoration(
+                                isDense: true,
+                                contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: Colors.grey.shade300)),
+                                enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: Colors.grey.shade300)),
+                              ),
+                              controller: TextEditingController(text: "$displayStock"),
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.black),
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.add_circle_outline, color: AppTheme.primary),
+                            onPressed: () => _updateStock(id, 1, originalStock),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.delete_outline, color: AppTheme.primary),
+                            onPressed: () => _markForDeletion(id),
+                          ),
+                        ],
+                      )
                   ],
                 );
               },

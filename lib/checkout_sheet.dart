@@ -99,6 +99,9 @@ class _CheckoutSheetState extends ConsumerState<CheckoutSheet> {
       // 2. Update stock quantities
       for (final item in orderItems) {
         final product = allProducts.firstWhere((p) => p['id'] == item['product_id']);
+        if (isAlwaysAvailableProduct(product)) {
+          continue;
+        }
         final currentStock = (product['stock_qty'] as num?)?.toInt() ?? 0;
         final newStock = currentStock - (item['qty'] as int);
         

@@ -139,6 +139,61 @@ class ErrorNotifier extends Notifier<String?> {
 }
 final errorProvider = NotifierProvider<ErrorNotifier, String?>(ErrorNotifier.new);
 
+bool isAlwaysAvailableFields(String name, String category) {
+  final normalizedName = name.toLowerCase();
+  final normalizedCategory = category.toLowerCase();
+  final compactName = normalizedName.replaceAll(RegExp(r'[\s\-_]+'), '');
+  final compactCategory = normalizedCategory.replaceAll(RegExp(r'[\s\-_]+'), '');
+  final matchesName =
+      normalizedName.contains('tea') ||
+      normalizedName.contains('coffee') ||
+      normalizedName.contains('cofee') ||
+      normalizedName.contains('juice') ||
+      normalizedName.contains('rose milk') ||
+      compactName.contains('rosemilk');
+  final matchesCategory =
+      normalizedCategory.contains('tea') ||
+      normalizedCategory.contains('coffee') ||
+      normalizedCategory.contains('cofee') ||
+      normalizedCategory.contains('juice') ||
+      normalizedCategory.contains('drink') ||
+      normalizedCategory.contains('rose milk') ||
+      compactCategory.contains('rosemilk');
+  return matchesName || matchesCategory;
+}
+
+bool isAlwaysAvailableProduct(Map<String, dynamic> product) {
+  final name = (product['name'] ?? '').toString();
+  final category = (product['category'] ?? '').toString();
+  return isAlwaysAvailableFields(name, category);
+}
+
+enum TimeSlot { morning, evening }
+
+class TimeSlotConfig {
+  final TimeSlot slot;
+  final String title;
+  final String subtitle;
+  final String tag;
+  final IconData icon;
+  final List<Color> gradient;
+  final List<String> filterKeywords;
+  final List<String> filterProductNames;
+  final List<String> addCategories;
+
+  const TimeSlotConfig({
+    required this.slot,
+    required this.title,
+    required this.subtitle,
+    required this.tag,
+    required this.icon,
+    required this.gradient,
+    required this.filterKeywords,
+    this.filterProductNames = const [],
+    required this.addCategories,
+  });
+}
+
 class HomePage extends ConsumerStatefulWidget {
   const HomePage({super.key});
   @override
@@ -158,6 +213,82 @@ class _HomePageState extends ConsumerState<HomePage> {
   void dispose() {
     _searchController.dispose();
     super.dispose();
+  }
+
+  TimeSlotConfig _timeSlotConfig(TimeSlot slot) {
+    switch (slot) {
+      case TimeSlot.morning:
+        return const TimeSlotConfig(
+          slot: TimeSlot.morning,
+          title: 'Morning Fresh Delights 🌅',
+          subtitle: 'Hot coffee, fresh tea, healthy breakfast snacks, and warm pastries available now.',
+          tag: 'MORNING SNACKS',
+          icon: Icons.wb_sunny_rounded,
+          gradient: [Color(0xFF2D5016), Color(0xFF6BA84D)],
+          filterKeywords: ['morning', 'drink'],
+          addCategories: ['Morning Snacks', 'Drinks', 'Other'],
+        );
+      case TimeSlot.evening:
+        return const TimeSlotConfig(
+          slot: TimeSlot.evening,
+          title: 'Evening Crispy Bites 🌇',
+          subtitle: 'Puffs, juice, cake, cutlets, samosas & evening chai ready from 4 PM.',
+          tag: 'EVENING SNACKS',
+          icon: Icons.nights_stay_rounded,
+          gradient: [Color(0xFFD4A574), Color(0xFFB58452)],
+          filterKeywords: ['evening', 'drink', 'puff', 'juice', 'cake', 'cutlet', 'samosa', 'samo', 'snack'],
+          filterProductNames: ['puff', 'juice', 'cake', 'cutlet', 'samosa', 'samo'],
+          addCategories: ['Puff', 'Samosa', 'Cake', 'Cutlet', 'Drinks', 'Evening Snacks', 'Other'],
+        );
+    }
+  }
+
+  void _openTimeSlotPage(TimeSlot slot) {
+    final config = _timeSlotConfig(slot);
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => TimeSlotProductsPage(
+          config: config,
+          onAddTap: (ctx) => _openTimeSlotAddProductSheet(ctx, slot),
+          onEdit: (ctx, product, categories) => _openEditProductSheet(ctx, product, categories),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openTimeSlotAddProductSheet(BuildContext context, TimeSlot slot) async {
+    final config = _timeSlotConfig(slot);
+    final allProducts = ref.read(productsProvider);
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      builder: (context) => SelectExistingProductSheet(
+        products: allProducts,
+        onSelect: (product) {
+          final updates = {
+            'id': product['id'],
+            'category': config.addCategories.first,
+          };
+          _updateProduct(product['id'], updates, null);
+        },
+        onCreateNew: () {
+          // Add small delay to let current sheet pop
+          Future.microtask(() {
+            showModalBottomSheet<void>(
+              context: context,
+              isScrollControlled: true,
+              backgroundColor: Colors.white,
+              builder: (context) => AddProductSheet(
+                categories: config.addCategories,
+                onAdd: (name, price, category, imagePath) => _saveProductOptimistically(name, price, category, imagePath),
+              ),
+            );
+          });
+        },
+      ),
+    );
   }
 
   Future<void> _fetchProducts() async {
@@ -195,6 +326,9 @@ class _HomePageState extends ConsumerState<HomePage> {
     final List<String> categories = ["All"];
     final existingCats = products.map((p) => p['category'] as String?).where((c) => c != null && c.isNotEmpty).cast<String>().toSet().toList()..sort();
     categories.addAll(existingCats);
+    if (!categories.contains("Other")) {
+      categories.add("Other");
+    }
 
     final filteredProducts = products.where((p) {
       final matchesCategory = selectedCategory == "All" || 
@@ -210,20 +344,30 @@ class _HomePageState extends ConsumerState<HomePage> {
               children: [
                 _buildHeader(),
                 _buildSearchBar(),
-                _buildPromoBanner(),
-                _buildCategories(categories),
                 Expanded(
-                  child: isLoading 
-                    ? const Center(child: CircularProgressIndicator(color: AppTheme.primary))
-                    : ref.watch(errorProvider) != null
-                      ? _buildErrorView()
-                      : RefreshIndicator(
-                          onRefresh: _fetchProducts,
-                          color: AppTheme.primary,
-                          child: filteredProducts.isEmpty
-                            ? _buildEmptyState()
-                            : _buildProductGrid(filteredProducts, categories),
-                        ),
+                  child: isLoading
+                      ? const Center(child: CircularProgressIndicator(color: AppTheme.primary))
+                      : ref.watch(errorProvider) != null
+                          ? _buildErrorView()
+                          : RefreshIndicator(
+                              onRefresh: _fetchProducts,
+                              color: AppTheme.primary,
+                              child: CustomScrollView(
+                                slivers: [
+                                  SliverToBoxAdapter(child: _buildPromoBanner()),
+                                  SliverToBoxAdapter(child: _buildCategories(categories)),
+                                  if (filteredProducts.isEmpty)
+                                    SliverFillRemaining(
+                                      hasScrollBody: false,
+                                      child: _buildEmptyState(),
+                                    )
+                                  else
+                                    SliverToBoxAdapter(
+                                      child: _buildProductGridInScroll(filteredProducts, categories),
+                                    ),
+                                ],
+                              ),
+                            ),
                 ),
               ],
             ),
@@ -413,20 +557,8 @@ class _HomePageState extends ConsumerState<HomePage> {
 
   Widget _buildPromoBanner() {
     final promoItems = [
-      {
-        'title': 'Morning Fresh Delights 🌅',
-        'subtitle': 'Hot coffee, fresh tea, healthy breakfast snacks, and warm pastries available now.',
-        'tag': 'MORNING SNACKS',
-        'icon': Icons.wb_sunny_rounded,
-        'gradient': [const Color(0xFF2D5016), const Color(0xFF6BA84D)],
-      },
-      {
-        'title': 'Evening Crispy Bites 🌇',
-        'subtitle': 'Freshly fried hot cutlets, delicious puffs, samosas, and evening chai ready from 4 PM.',
-        'tag': 'EVENING SNACKS',
-        'icon': Icons.nights_stay_rounded,
-        'gradient': [const Color(0xFFD4A574), const Color(0xFFB58452)],
-      },
+      _timeSlotConfig(TimeSlot.morning),
+      _timeSlotConfig(TimeSlot.evening),
     ];
 
     return SizedBox(
@@ -436,81 +568,87 @@ class _HomePageState extends ConsumerState<HomePage> {
         itemCount: promoItems.length,
         itemBuilder: (context, index) {
           final item = promoItems[index];
-          final grad = item['gradient'] as List<Color>;
-          return Container(
-            clipBehavior: Clip.antiAlias,
-            margin: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: grad,
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              borderRadius: BorderRadius.circular(16),
-              boxShadow: [
-                BoxShadow(
-                  color: grad[0].withValues(alpha: 0.3),
-                  blurRadius: 8,
-                  offset: const Offset(0, 4),
+          final grad = item.gradient;
+          return GestureDetector(
+            onTap: () {
+              Haptics.light();
+              _openTimeSlotPage(item.slot);
+            },
+            child: Container(
+              clipBehavior: Clip.antiAlias,
+              margin: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: grad,
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
                 ),
-              ],
-            ),
-            child: Stack(
-              children: [
-                Positioned(
-                  right: -10,
-                  bottom: -10,
-                  child: Icon(
-                    item['icon'] as IconData,
-                    size: 110,
-                    color: Colors.white.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: grad[0].withValues(alpha: 0.3),
+                    blurRadius: 8,
+                    offset: const Offset(0, 4),
                   ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: Colors.white24,
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Text(
-                          item['tag'].toString(),
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 1.0,
+                ],
+              ),
+              child: Stack(
+                children: [
+                  Positioned(
+                    right: -10,
+                    bottom: -10,
+                    child: Icon(
+                      item.icon,
+                      size: 110,
+                      color: Colors.white.withValues(alpha: 0.15),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.white24,
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            item.tag,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 1.0,
+                            ),
                           ),
                         ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        item['title'].toString(),
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
+                        const SizedBox(height: 6),
+                        Text(
+                          item.title,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        item['subtitle'].toString(),
-                        style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.85),
-                          fontSize: 11,
+                        const SizedBox(height: 2),
+                        Text(
+                          item.subtitle,
+                          style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.85),
+                            fontSize: 11,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
                         ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           );
         },
@@ -576,12 +714,10 @@ class _HomePageState extends ConsumerState<HomePage> {
     );
   }
 
-  Widget _buildProductGrid(List<Map<String, dynamic>> filteredProducts, List<String> categories) {
+  Widget _buildProductGridInScroll(List<Map<String, dynamic>> filteredProducts, List<String> categories) {
     final width = MediaQuery.of(context).size.width;
     int crossAxisCount = width > 1200 ? 6 : width > 900 ? 5 : width > 600 ? 4 : 2;
-    
-    // Dynamic aspect ratio – must be small enough so the fixed-height
-    // info section (name + price + stock + counter ≈ 85px) never overflows.
+
     double aspectRatio;
     if (width > 1200) {
       aspectRatio = 0.78;
@@ -595,12 +731,14 @@ class _HomePageState extends ConsumerState<HomePage> {
 
     return AnimationLimiter(
       child: GridView.builder(
-        padding: const EdgeInsets.fromLTRB(20, 10, 20, 140),
+        padding: const EdgeInsets.fromLTRB(20, 10, 20, 220),
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
         gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: crossAxisCount, 
-          childAspectRatio: aspectRatio, 
-          crossAxisSpacing: 15, 
-          mainAxisSpacing: 15
+          crossAxisCount: crossAxisCount,
+          childAspectRatio: aspectRatio,
+          crossAxisSpacing: 15,
+          mainAxisSpacing: 15,
         ),
         itemCount: filteredProducts.length,
         itemBuilder: (context, index) {
@@ -612,7 +750,7 @@ class _HomePageState extends ConsumerState<HomePage> {
               child: FadeInAnimation(
                 child: ProductCard(
                   product: filteredProducts[index],
-                  onEdit: () => _openEditProductSheet(filteredProducts[index], categories),
+                  onEdit: () => _openEditProductSheet(context, filteredProducts[index], categories),
                 ),
               ),
             ),
@@ -650,56 +788,7 @@ class _HomePageState extends ConsumerState<HomePage> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              if (selectedCount > 0)
-                Column(
-                  children: [
-                    Container(
-                      margin: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                      decoration: BoxDecoration(
-                        color: AppTheme.primary,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Expanded(child: Text("Selected: $selectedCount", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis)),
-                          const SizedBox(width: 12),
-                          Flexible(child: Text("Amount: ₹${total.toStringAsFixed(0)}", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis)),
-                        ],
-                      ),
-                    ),
-                    Container(
-                      margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                      width: double.infinity,
-                      child: ElevatedButton(
-                        onPressed: () {
-                          Haptics.light();
-                          showDialog(
-                            context: context,
-                            builder: (context) => const CheckoutSheet(),
-                          );
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.white,
-                          foregroundColor: AppTheme.primary,
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            side: BorderSide(color: AppTheme.primary, width: 1),
-                          ),
-                        ),
-                        child: const Text(
-                          "Continue",
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
+              const CheckoutFloatingBar(),
               Container(
                 padding: const EdgeInsets.symmetric(vertical: 8),
                 child: Row(
@@ -811,7 +900,7 @@ class _HomePageState extends ConsumerState<HomePage> {
     }
   }
 
-  Future<void> _openEditProductSheet(Map<String, dynamic> product, List<String> categories) async {
+  Future<void> _openEditProductSheet(BuildContext context, Map<String, dynamic> product, List<String> categories) async {
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -890,6 +979,130 @@ class _HomePageState extends ConsumerState<HomePage> {
   }
 }
 
+class TimeSlotProductsPage extends ConsumerWidget {
+  final TimeSlotConfig config;
+  final Future<void> Function(BuildContext context) onAddTap;
+  final Future<void> Function(BuildContext context, Map<String, dynamic> product, List<String> categories) onEdit;
+
+  const TimeSlotProductsPage({
+    super.key,
+    required this.config,
+    required this.onAddTap,
+    required this.onEdit,
+  });
+
+  bool _matchesSlot(Map<String, dynamic> product) {
+    final category = (product['category'] ?? '').toString().toLowerCase();
+    final name = (product['name'] ?? '').toString().toLowerCase();
+    final matchesCategory = config.filterKeywords.any((keyword) => category.contains(keyword));
+    final matchesName = config.filterProductNames.any((keyword) => name.contains(keyword));
+    return matchesCategory || matchesName;
+  }
+
+  List<String> _buildCategories(List<Map<String, dynamic>> products) {
+    final List<String> categories = ["All"];
+    final existingCats = products
+        .map((p) => p['category'] as String?)
+        .where((c) => c != null && c.isNotEmpty)
+        .cast<String>()
+        .toSet()
+        .toList()
+      ..sort();
+    categories.addAll(existingCats);
+    return categories;
+  }
+
+  Widget _buildProductGrid(BuildContext context, List<Map<String, dynamic>> filteredProducts, List<String> categories) {
+    final width = MediaQuery.of(context).size.width;
+    int crossAxisCount = width > 1200 ? 6 : width > 900 ? 5 : width > 600 ? 4 : 2;
+    
+    double aspectRatio;
+    if (width > 1200) {
+      aspectRatio = 0.78;
+    } else if (width > 900) {
+      aspectRatio = 0.72;
+    } else if (width > 600) {
+      aspectRatio = 0.68;
+    } else {
+      aspectRatio = width < 365 ? 0.54 : 0.58;
+    }
+
+    return AnimationLimiter(
+      child: GridView.builder(
+        padding: const EdgeInsets.fromLTRB(20, 6, 20, 20),
+        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: crossAxisCount,
+          childAspectRatio: aspectRatio,
+          crossAxisSpacing: 15,
+          mainAxisSpacing: 15,
+        ),
+        itemCount: filteredProducts.length,
+        itemBuilder: (context, index) {
+          return AnimationConfiguration.staggeredGrid(
+            position: index,
+            duration: const Duration(milliseconds: 375),
+            columnCount: crossAxisCount,
+            child: ScaleAnimation(
+              child: FadeInAnimation(
+                child: ProductCard(
+                  product: filteredProducts[index],
+                  onEdit: () => onEdit(context, filteredProducts[index], categories),
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final products = ref.watch(productsProvider);
+    final filteredProducts = products.where((p) {
+      return _matchesSlot(p);
+    }).toList();
+    final categories = _buildCategories(products);
+
+    return Scaffold(
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        elevation: 0,
+        iconTheme: const IconThemeData(color: AppTheme.primary),
+        title: Text(
+          config.title,
+          style: const TextStyle(
+            color: AppTheme.primary,
+            fontWeight: FontWeight.bold,
+            fontSize: 18,
+          ),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        actions: [
+          IconButton(
+            onPressed: () {
+              Haptics.light();
+              onAddTap(context);
+            },
+            icon: const Icon(Icons.add_rounded, color: AppTheme.primary),
+          ),
+        ],
+      ),
+      body: Column(
+        children: [
+          Expanded(
+            child: filteredProducts.isEmpty
+                ? const Center(child: Text("No products found for this time slot"))
+                : _buildProductGrid(context, filteredProducts, categories),
+          ),
+          const CheckoutFloatingBar(),
+        ],
+      ),
+    );
+  }
+}
+
 class ProductCard extends ConsumerStatefulWidget {
   final Map<String, dynamic> product;
   final VoidCallback onEdit;
@@ -926,7 +1139,7 @@ class _ProductCardState extends ConsumerState<ProductCard> {
     final onEdit = widget.onEdit;
     final productId = product["id"];
     final count = ref.watch(tapCountsProvider)[productId] ?? 0;
-    
+
     if (_qtyController.text != "$count") {
       _qtyController.text = count > 0 ? "$count" : "";
     }
@@ -955,130 +1168,97 @@ class _ProductCardState extends ConsumerState<ProductCard> {
       badgeText = "Chilled";
     }
 
-    // Refined stock remaining pill
+    // Refined stock remaining pill with high-end dot indicator design (Larger text/dot size)
     final stockQty = (product['stock_qty'] as num?)?.toInt() ?? 0;
+    final alwaysAvailable = isAlwaysAvailableProduct(product);
     Widget stockWidget;
-    if (stockQty <= 0) {
+    if (alwaysAvailable) {
+      stockWidget = const SizedBox.shrink();
+    } else if (stockQty <= 0) {
       stockWidget = Container(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         decoration: BoxDecoration(
-          color: Colors.red.shade50,
+          color: const Color(0xFFFFECEB),
           borderRadius: BorderRadius.circular(6),
         ),
-        child: Text("Out of stock", style: GoogleFonts.roboto(fontSize: isSmallScreen ? 8.5 : 10, fontWeight: FontWeight.bold, color: Colors.red.shade700)),
-      );
-    } else if (stockQty <= 5) {
-      stockWidget = Container(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-        decoration: BoxDecoration(
-          color: Colors.orange.shade50,
-          borderRadius: BorderRadius.circular(6),
-        ),
-        child: Text("Only $stockQty left", style: GoogleFonts.roboto(fontSize: isSmallScreen ? 8.5 : 10, fontWeight: FontWeight.bold, color: Colors.orange.shade700)),
-      );
-    } else {
-      stockWidget = Text(
-        "Stock: $stockQty",
-        style: GoogleFonts.roboto(fontSize: isSmallScreen ? 9.5 : 11, fontWeight: FontWeight.w600, color: AppTheme.textLight),
-      );
-    }
-
-    // Interactive quantity slider or add button
-    Widget counterWidget;
-    if (!isSelected) {
-      counterWidget = GestureDetector(
-        onTap: () {
-          Haptics.light();
-          SoundManager.instance.playClickSound();
-          ref.read(tapCountsProvider.notifier).updateState((state) {
-            final newState = Map<dynamic, int>.from(state);
-            newState[productId] = 1;
-            return newState;
-          });
-        },
-        child: Container(
-          padding: EdgeInsets.symmetric(horizontal: isSmallScreen ? 8 : 10, vertical: isSmallScreen ? 5 : 6),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: AppTheme.primary, width: 1.2),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.add, size: isSmallScreen ? 12 : 14, color: AppTheme.primary),
-              const SizedBox(width: 4),
-              Text(
-                "Add",
-                style: GoogleFonts.poppins(
-                  fontSize: isSmallScreen ? 10 : 11,
-                  fontWeight: FontWeight.bold,
-                  color: AppTheme.primary,
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-    } else {
-      counterWidget = Container(
-        decoration: BoxDecoration(
-          color: AppTheme.primary,
-          borderRadius: BorderRadius.circular(10),
-        ),
-        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            GestureDetector(
-              onTap: () {
-                Haptics.light();
-                SoundManager.instance.playClickSound();
-                ref.read(tapCountsProvider.notifier).updateState((state) {
-                  final newState = Map<dynamic, int>.from(state);
-                  final nextVal = (state[productId] ?? 0) - 1;
-                  if (nextVal <= 0) {
-                    newState.remove(productId);
-                  } else {
-                    newState[productId] = nextVal;
-                  }
-                  return newState;
-                });
-              },
-              child: const Padding(
-                padding: EdgeInsets.all(4.0),
-                child: Icon(Icons.remove, size: 14, color: Colors.white),
+            Container(
+              width: 6,
+              height: 6,
+              decoration: const BoxDecoration(
+                color: Color(0xFFE53935),
+                shape: BoxShape.circle,
               ),
             ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 6),
-              child: Text(
-                "$count",
-                style: GoogleFonts.poppins(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: isSmallScreen ? 11 : 12,
-                ),
+            const SizedBox(width: 5),
+            Text(
+              "Sold out",
+              style: GoogleFonts.poppins(
+                fontSize: isSmallScreen ? 10 : 11.5,
+                fontWeight: FontWeight.w700,
+                color: const Color(0xFFC62828),
               ),
             ),
-            GestureDetector(
-              onTap: () {
-                Haptics.light();
-                SoundManager.instance.playClickSound();
-                ref.read(tapCountsProvider.notifier).updateState((state) {
-                  final newState = Map<dynamic, int>.from(state);
-                  final nextVal = (state[productId] ?? 0) + 1;
-                  if (nextVal >= 100) {
-                    newState.remove(productId);
-                  } else {
-                    newState[productId] = nextVal;
-                  }
-                  return newState;
-                });
-              },
-              child: const Padding(
-                padding: EdgeInsets.all(4.0),
-                child: Icon(Icons.add, size: 14, color: Colors.white),
+          ],
+        ),
+      );
+    } else if (stockQty <= 5) {
+      stockWidget = Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: const Color(0xFFFFF3E0),
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 6,
+              height: 6,
+              decoration: const BoxDecoration(
+                color: Color(0xFFFB8C00),
+                shape: BoxShape.circle,
+              ),
+            ),
+            const SizedBox(width: 5),
+            Text(
+              "$stockQty left",
+              style: GoogleFonts.poppins(
+                fontSize: isSmallScreen ? 10 : 11.5,
+                fontWeight: FontWeight.w700,
+                color: const Color(0xFFEF6C00),
+              ),
+            ),
+          ],
+        ),
+      );
+    } else {
+      stockWidget = Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: const Color(0xFFE8F5E9),
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 6,
+              height: 6,
+              decoration: const BoxDecoration(
+                color: Color(0xFF43A047),
+                shape: BoxShape.circle,
+              ),
+            ),
+            const SizedBox(width: 5),
+            Text(
+              "$stockQty available",
+              style: GoogleFonts.poppins(
+                fontSize: isSmallScreen ? 10 : 11.5,
+                fontWeight: FontWeight.w700,
+                color: const Color(0xFF2E7D32),
               ),
             ),
           ],
@@ -1113,6 +1293,11 @@ class _ProductCardState extends ConsumerState<ProductCard> {
               Expanded(
                 child: GestureDetector(
                   onTap: () {
+                    if (!alwaysAvailable && stockQty <= 0) {
+                      // Haptic notification for disabled/sold out click
+                      HapticFeedback.heavyImpact();
+                      return;
+                    }
                     Haptics.light();
                     SoundManager.instance.playClickSound();
                     ref.read(tapCountsProvider.notifier).updateState((state) {
@@ -1148,6 +1333,32 @@ class _ProductCardState extends ConsumerState<ProductCard> {
                           ),
                           child: const Center(
                             child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                          ),
+                        ),
+                      if (!alwaysAvailable && stockQty <= 0)
+                        Container(
+                          decoration: BoxDecoration(
+                            color: Colors.black.withValues(alpha: 0.45),
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          child: Center(
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: Colors.black54,
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(color: Colors.white30, width: 1),
+                              ),
+                              child: Text(
+                                "SOLD OUT",
+                                style: GoogleFonts.poppins(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w900,
+                                  fontSize: isSmallScreen ? 10 : 12,
+                                  letterSpacing: 1.0,
+                                ),
+                              ),
+                            ),
                           ),
                         ),
                       
@@ -1284,6 +1495,7 @@ class _ProductCardState extends ConsumerState<ProductCard> {
               const SizedBox(height: 2),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   Text(
                     "₹${(product["price"] as num).toInt()}",
@@ -1291,20 +1503,13 @@ class _ProductCardState extends ConsumerState<ProductCard> {
                       fontWeight: FontWeight.w900,
                       fontSize: priceFontSize,
                       color: AppTheme.primary,
+                      height: 1.1,
                     ),
                   ),
                   Flexible(child: stockWidget),
                 ],
               ),
               const SizedBox(height: 4),
-              
-              // Interactive Quantity control bottom row
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  counterWidget,
-                ],
-              ),
             ],
           ),
           
@@ -1394,7 +1599,11 @@ class _AddProductSheetState extends State<AddProductSheet> {
           children: [
             const Text("Add Product", style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
             const SizedBox(height: 16),
-            TextField(controller: _nameController, decoration: const InputDecoration(labelText: "Product name", border: OutlineInputBorder())),
+            TextField(
+              controller: _nameController,
+              decoration: const InputDecoration(labelText: "Product name", border: OutlineInputBorder()),
+              onChanged: (_) => setState(() {}),
+            ),
             const SizedBox(height: 12),
             TextField(controller: _priceController, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: "Price", border: OutlineInputBorder())),
             const SizedBox(height: 12),
@@ -1433,6 +1642,100 @@ class _AddProductSheetState extends State<AddProductSheet> {
         ),
       ),
     );
+  }
+}
+
+class SelectExistingProductSheet extends StatelessWidget {
+  final List<Map<String, dynamic>> products;
+  final Function(Map<String, dynamic>) onSelect;
+  final VoidCallback onCreateNew;
+
+  const SelectExistingProductSheet({
+    super.key,
+    required this.products,
+    required this.onSelect,
+    required this.onCreateNew,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: MediaQuery.of(context).size.height * 0.75,
+      padding: const EdgeInsets.only(top: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  "Add to Card",
+                  style: GoogleFonts.poppins(fontSize: 20, fontWeight: FontWeight.w700),
+                ),
+                TextButton.icon(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    onCreateNew();
+                  },
+                  icon: const Icon(Icons.add),
+                  label: Text("Create New", style: GoogleFonts.poppins()),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          const Divider(height: 1),
+          Expanded(
+            child: ListView.separated(
+              itemCount: products.length,
+              separatorBuilder: (context, index) => const Divider(height: 1, color: Color(0xFFE5E2DD)),
+              itemBuilder: (context, index) {
+                final product = products[index];
+                return ListTile(
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                  leading: ClipRRect(
+                    borderRadius: BorderRadius.circular(10),
+                    child: SizedBox(
+                      width: 50,
+                      height: 50,
+                      child: _buildImage(product['image_url'] as String?),
+                    ),
+                  ),
+                  title: Text(
+                    product['name'] ?? '',
+                    style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 16, color: AppTheme.textPrimary),
+                  ),
+                  subtitle: Text(
+                    product['category'] ?? '',
+                    style: GoogleFonts.poppins(color: AppTheme.textSecondary, fontSize: 14),
+                  ),
+                  onTap: () {
+                    onSelect(product);
+                    Navigator.pop(context);
+                  },
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildImage(String? imageUrl) {
+    if (imageUrl != null && imageUrl.startsWith('http')) {
+      return CachedNetworkImage(
+        imageUrl: imageUrl,
+        fit: BoxFit.cover,
+        placeholder: (context, url) => Container(color: const Color(0xFFF1F3F5)),
+        errorWidget: (context, url, error) => Container(color: const Color(0xFFF1F3F5), child: const Icon(Icons.image_not_supported_outlined, color: Color(0xFFADB5BD))),
+      );
+    } else if (imageUrl != null) {
+      return Image.file(File(imageUrl), fit: BoxFit.cover);
+    }
+    return Container(color: const Color(0xFFF1F3F5), child: const Icon(Icons.image_not_supported_outlined, color: Color(0xFFADB5BD)));
   }
 }
 
@@ -1485,6 +1788,8 @@ class _EditProductSheetState extends State<EditProductSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final resolvedCategory = _category == "Other" ? _otherCategoryController.text.trim() : _category;
+    final isAlwaysAvailable = isAlwaysAvailableFields(_nameController.text, resolvedCategory);
     return Padding(
       padding: EdgeInsets.fromLTRB(20, 20, 20, MediaQuery.of(context).viewInsets.bottom + 20),
       child: SingleChildScrollView(
@@ -1506,15 +1811,26 @@ class _EditProductSheetState extends State<EditProductSheet> {
               ],
             ),
             const SizedBox(height: 16),
-            TextField(controller: _nameController, decoration: const InputDecoration(labelText: "Product name", border: OutlineInputBorder())),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(child: TextField(controller: _priceController, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: "Price", border: OutlineInputBorder()))),
-                const SizedBox(width: 12),
-                Expanded(child: TextField(controller: _stockController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: "Stock Qty", border: OutlineInputBorder()))),
-              ],
+            TextField(
+              controller: _nameController,
+              decoration: const InputDecoration(labelText: "Product name", border: OutlineInputBorder()),
+              onChanged: (_) => setState(() {}),
             ),
+            const SizedBox(height: 12),
+            if (isAlwaysAvailable)
+              TextField(
+                controller: _priceController,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                decoration: const InputDecoration(labelText: "Price", border: OutlineInputBorder()),
+              )
+            else
+              Row(
+                children: [
+                  Expanded(child: TextField(controller: _priceController, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: "Price", border: OutlineInputBorder()))),
+                  const SizedBox(width: 12),
+                  Expanded(child: TextField(controller: _stockController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: "Stock Qty", border: OutlineInputBorder()))),
+                ],
+              ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
               value: _category,
@@ -1526,7 +1842,8 @@ class _EditProductSheetState extends State<EditProductSheet> {
               const SizedBox(height: 12),
               TextField(
                 controller: _otherCategoryController,
-                decoration: const InputDecoration(labelText: "Enter category name", border: OutlineInputBorder()),
+                decoration: const InputDecoration(labelText: "Enter new category name", border: OutlineInputBorder(), hintText: "e.g. Pizza, Cake"),
+                onChanged: (_) => setState(() {}),
               ),
             ],
             const SizedBox(height: 12),
@@ -1535,16 +1852,21 @@ class _EditProductSheetState extends State<EditProductSheet> {
             SizedBox(width: double.infinity, child: ElevatedButton(style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primary, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 14)), onPressed: () {
               final name = _nameController.text.trim();
               final price = double.tryParse(_priceController.text.trim());
-              final stock = int.tryParse(_stockController.text.trim()) ?? 0;
               String finalCategory = _category;
               if (_category == "Other") {
                 finalCategory = _otherCategoryController.text.trim();
               }
+              final alwaysAvailable = isAlwaysAvailableFields(name, finalCategory);
               if (name.isEmpty || price == null || price <= 0 || (finalCategory == "Other" && finalCategory.isEmpty) || finalCategory.isEmpty) { 
                 ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Enter valid name, price and category."))); 
                 return; 
               }
-              widget.onUpdate({'name': name, 'price': price, 'category': finalCategory, 'stock_qty': stock}, _selectedImage?.path);
+              final updates = <String, dynamic>{'name': name, 'price': price, 'category': finalCategory};
+              if (!alwaysAvailable) {
+                final stock = int.tryParse(_stockController.text.trim()) ?? 0;
+                updates['stock_qty'] = stock;
+              }
+              widget.onUpdate(updates, _selectedImage?.path);
               Navigator.pop(context);
             }, child: const Text("Save Changes"))),
           ],
@@ -1554,4 +1876,73 @@ class _EditProductSheetState extends State<EditProductSheet> {
   }
 }
 
+class CheckoutFloatingBar extends ConsumerWidget {
+  const CheckoutFloatingBar({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final products = ref.watch(productsProvider);
+    final tapCounts = ref.watch(tapCountsProvider);
+    final selectedCount = tapCounts.values.fold<int>(0, (sum, count) => sum + count);
+    
+    if (selectedCount <= 0) return const SizedBox.shrink();
+
+    final total = tapCounts.entries.fold<double>(0, (sum, entry) {
+      final match = products.firstWhere((p) => p["id"] == entry.key, orElse: () => {});
+      final price = match["price"] is num ? (match["price"] as num).toDouble() : 0.0;
+      return sum + (price * entry.value);
+    });
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          margin: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration: BoxDecoration(
+            color: AppTheme.primary,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(child: Text("Selected: $selectedCount", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis)),
+              const SizedBox(width: 12),
+              Flexible(child: Text("Amount: ₹${total.toStringAsFixed(0)}", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis)),
+            ],
+          ),
+        ),
+        Container(
+          margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+          width: double.infinity,
+          child: ElevatedButton(
+            onPressed: () {
+              Haptics.light();
+              showDialog(
+                context: context,
+                builder: (context) => const CheckoutSheet(),
+              );
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.white,
+              foregroundColor: AppTheme.primary,
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+                side: BorderSide(color: AppTheme.primary, width: 1),
+              ),
+            ),
+            child: const Text(
+              "Continue",
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
 
