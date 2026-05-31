@@ -1,9 +1,9 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'l10n/app_localizations.dart';
 import 'theme/app_theme.dart';
 
 // Simple notifiers to hold the data
@@ -62,7 +62,7 @@ class _ExpensesPageState extends ConsumerState<ExpensesPage> {
       if (mounted) {
         ref.read(isExpensesLoadingProvider.notifier).update(false);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Fetch error: $e"), backgroundColor: Colors.red),
+          SnackBar(content: Text(context.t('fetchError', args: {'error': e})), backgroundColor: Colors.red),
         );
       }
     }
@@ -78,7 +78,7 @@ class _ExpensesPageState extends ConsumerState<ExpensesPage> {
       appBar: AppBar(
         backgroundColor: Colors.white,
         foregroundColor: AppTheme.primary,
-        title: const Text("Expense", style: TextStyle(color: AppTheme.primary, fontWeight: FontWeight.bold)),
+        title: Text(context.t('expense'), style: const TextStyle(color: AppTheme.primary, fontWeight: FontWeight.bold)),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new_rounded, color: AppTheme.primary),
           onPressed: () => Navigator.pop(context),
@@ -99,9 +99,9 @@ class _ExpensesPageState extends ConsumerState<ExpensesPage> {
                     children: [
                       const Icon(Icons.receipt_long_outlined, size: 80, color: AppTheme.primary),
                       const SizedBox(height: 16),
-                      const Text("No orders found", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.primary)),
+                      Text(context.t('noOrdersFound'), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.primary)),
                       const SizedBox(height: 8),
-                      TextButton(onPressed: _fetchData, child: const Text("Try Again", style: TextStyle(color: AppTheme.primary))),
+                      TextButton(onPressed: _fetchData, child: Text(context.t('tryAgain'), style: const TextStyle(color: AppTheme.primary))),
                     ],
                   ),
                 )
@@ -142,9 +142,10 @@ class _ExpenseCardState extends State<ExpenseCard> {
     }
 
     final createdAt = DateTime.tryParse(widget.expense['created_at'] ?? '')?.toLocal() ?? DateTime.now();
-    final timeStr = DateFormat('h:mma').format(createdAt).toLowerCase();
-    final dayName = DateFormat('EEEE').format(createdAt);
-    final dateStrFormatted = DateFormat('dd-MM-yyyy').format(createdAt);
+    final localeName = Localizations.localeOf(context).toLanguageTag();
+    final timeStr = DateFormat('h:mma', localeName).format(createdAt).toLowerCase();
+    final dayName = DateFormat('EEEE', localeName).format(createdAt);
+    final dateStrFormatted = DateFormat('dd-MM-yyyy', localeName).format(createdAt);
     final paymentMethod = (widget.expense['payment_method'] as String?)?.toLowerCase() ?? 'unknown';
 
     return GestureDetector(
@@ -200,7 +201,7 @@ class _ExpenseCardState extends State<ExpenseCard> {
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: Text(
-                              paymentMethod == 'online' ? 'Online' : 'Offline',
+                              paymentMethod == 'online' ? context.t('online') : context.t('offline'),
                               style: TextStyle(
                                 color: paymentMethod == 'online' ? Colors.blue.shade700 : Colors.green.shade700,
                                 fontWeight: FontWeight.bold,
@@ -212,7 +213,7 @@ class _ExpenseCardState extends State<ExpenseCard> {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        "$dayName, $timeStr • ${items.length} items",
+                        "$dayName, $timeStr • ${context.t('items', args: {'count': items.length})}",
                         style: TextStyle(fontSize: 12, color: AppTheme.primary.withValues(alpha: 0.7)),
                       ),
                     ],
@@ -231,6 +232,12 @@ class _ExpenseCardState extends State<ExpenseCard> {
               const Divider(height: 1, color: Color(0xFFEEEEEE)),
               const SizedBox(height: 16),
               ...items.map((item) {
+                final itemMap = item is Map ? Map<String, dynamic>.from(item) : <String, dynamic>{};
+                final itemName = context.localizedProductValue(
+                  itemMap,
+                  i18nColumn: 'product_name_i18n',
+                  fallbackColumn: 'product_name',
+                );
                 return Padding(
                   padding: const EdgeInsets.only(bottom: 8.0),
                   child: Row(
@@ -238,14 +245,14 @@ class _ExpenseCardState extends State<ExpenseCard> {
                     children: [
                       Expanded(
                         child: Text(
-                          item['product_name'] ?? 'Unknown',
+                          itemName.isEmpty ? context.t('unknown') : itemName,
                           style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: AppTheme.primary),
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
                       const SizedBox(width: 8),
                       Text(
-                        "x${item['qty'] ?? 1}",
+                        "x${itemMap['qty'] ?? 1}",
                         style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.primary, fontSize: 14),
                       ),
                     ],
@@ -254,7 +261,7 @@ class _ExpenseCardState extends State<ExpenseCard> {
               }),
               const SizedBox(height: 12),
               Text(
-                "Date: $dateStrFormatted",
+                context.t('date', args: {'date': dateStrFormatted}),
                 style: TextStyle(color: AppTheme.primary.withValues(alpha: 0.6), fontSize: 12, fontStyle: FontStyle.italic),
               ),
             ],

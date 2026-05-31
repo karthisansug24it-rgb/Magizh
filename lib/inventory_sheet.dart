@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'main.dart'; // To access productsProvider, SoundManager, Haptics
+import 'l10n/app_localizations.dart';
 import 'theme/app_theme.dart';
 
 class InventorySheet extends ConsumerStatefulWidget {
@@ -71,7 +72,7 @@ class _InventorySheetState extends ConsumerState<InventorySheet> {
       if (mounted) Navigator.pop(context);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error saving: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.t('errorSaving', args: {'error': e}))));
         setState(() => _isSaving = false);
       }
     }
@@ -101,7 +102,7 @@ class _InventorySheetState extends ConsumerState<InventorySheet> {
     final activeProducts = allProducts.where((p) => !_productsToDelete.contains(p['id'])).toList();
 
     final filteredProducts = activeProducts.where((p) {
-      return p['name'].toString().toLowerCase().contains(_searchQuery.toLowerCase());
+      return context.productName(p).toLowerCase().contains(_searchQuery.toLowerCase());
     }).toList();
 
     return Container(
@@ -110,13 +111,13 @@ class _InventorySheetState extends ConsumerState<InventorySheet> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            "Inventory",
+          Text(
+            context.t('inventory'),
             style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: AppTheme.primary),
           ),
           const SizedBox(height: 4),
           Text(
-            "Adjust quantities and upload",
+            context.t('adjustInventory'),
             style: TextStyle(fontSize: 14, color: AppTheme.primary.withValues(alpha: 0.7)),
           ),
           const SizedBox(height: 16),
@@ -130,11 +131,11 @@ class _InventorySheetState extends ConsumerState<InventorySheet> {
             child: TextField(
               controller: _searchController,
               onChanged: (val) => setState(() => _searchQuery = val),
-              decoration: const InputDecoration(
-                hintText: "Search products...",
-                prefixIcon: Icon(Icons.search, color: AppTheme.primary),
+              decoration: InputDecoration(
+                hintText: context.t('searchProducts'),
+                prefixIcon: const Icon(Icons.search, color: AppTheme.primary),
                 border: InputBorder.none,
-                contentPadding: EdgeInsets.symmetric(vertical: 14),
+                contentPadding: const EdgeInsets.symmetric(vertical: 14),
               ),
             ),
           ),
@@ -168,8 +169,8 @@ class _InventorySheetState extends ConsumerState<InventorySheet> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(p['name'], style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16, color: Colors.black)),
-                          Text(p['category'] ?? 'N/A', style: TextStyle(color: AppTheme.primary.withValues(alpha: 0.7), fontSize: 13)),
+                          Text(context.productName(p), style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16, color: Colors.black)),
+                          Text(context.productCategory(p).isEmpty ? context.t('notAvailable') : context.productCategory(p), style: TextStyle(color: AppTheme.primary.withValues(alpha: 0.7), fontSize: 13)),
                         ],
                       ),
                     ),
@@ -248,7 +249,7 @@ class _InventorySheetState extends ConsumerState<InventorySheet> {
                         icon: _isSaving
                             ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
                             : const Icon(Icons.save_outlined),
-                        label: Text(_isSaving ? "Saving..." : "Save"),
+                        label: Text(_isSaving ? context.t('saving') : context.t('save')),
                         onPressed: _isSaving ? null : _saveChanges,
                       ),
                     ),
@@ -263,7 +264,7 @@ class _InventorySheetState extends ConsumerState<InventorySheet> {
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                       ),
                       icon: const Icon(Icons.add),
-                      label: const Text("Add"),
+                      label: Text(context.t('add')),
                       onPressed: _openAddProductsSheet,
                     ),
                   ),
@@ -324,7 +325,7 @@ class _AddProductsToInventorySheetState extends State<AddProductsToInventoryShee
     } catch (e) {
       if (mounted) {
         setState(() => _isLoading = false);
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.t('fetchError', args: {'error': e}))));
       }
     }
   }
@@ -343,7 +344,7 @@ class _AddProductsToInventorySheetState extends State<AddProductsToInventoryShee
     } catch (e) {
       if (mounted) {
         setState(() => _isSaving = false);
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.t('errorSaving', args: {'error': e}))));
       }
     }
   }
@@ -356,13 +357,13 @@ class _AddProductsToInventorySheetState extends State<AddProductsToInventoryShee
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            "Add Products",
+          Text(
+            context.t('addProducts'),
             style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 4),
           Text(
-            "Pick snacks to restore in inventory",
+            context.t('restoreInventory'),
             style: TextStyle(color: AppTheme.primary.withValues(alpha: 0.7), fontSize: 14),
           ),
           const SizedBox(height: 16),
@@ -370,7 +371,7 @@ class _AddProductsToInventorySheetState extends State<AddProductsToInventoryShee
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator(color: AppTheme.primary))
                 : _inactiveProducts.isEmpty
-                    ? const Center(child: Text("No inactive products found.", style: TextStyle(color: AppTheme.primary)))
+                    ? Center(child: Text(context.t('noInactiveProducts'), style: const TextStyle(color: AppTheme.primary)))
                     : ListView.separated(
                         itemCount: _inactiveProducts.length,
                         separatorBuilder: (context, index) => Divider(height: 1, color: Colors.grey.shade300),
@@ -382,8 +383,8 @@ class _AddProductsToInventorySheetState extends State<AddProductsToInventoryShee
                           return ListTile(
                             contentPadding: EdgeInsets.zero,
                             leading: const Icon(Icons.fastfood_outlined, color: AppTheme.primary),
-                            title: Text(p['name'], style: TextStyle(color: isSelected ? AppTheme.primary : AppTheme.primary)),
-                            subtitle: Text(p['category'] ?? 'N/A', style: const TextStyle(color: AppTheme.primary)),
+                            title: Text(context.productName(p), style: TextStyle(color: isSelected ? AppTheme.primary : AppTheme.primary)),
+                            subtitle: Text(context.productCategory(p).isEmpty ? context.t('notAvailable') : context.productCategory(p), style: const TextStyle(color: AppTheme.primary)),
                             trailing: Checkbox(
                               value: isSelected,
                               activeColor: Colors.grey.shade400,
@@ -426,7 +427,7 @@ class _AddProductsToInventorySheetState extends State<AddProductsToInventoryShee
                   onPressed: _selectedIds.isEmpty || _isSaving ? null : _saveSelected,
                   child: _isSaving
                       ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                      : const Text("Save to Inventory", style: TextStyle(fontWeight: FontWeight.w600)),
+                      : Text(context.t('saveToInventory'), style: const TextStyle(fontWeight: FontWeight.w600)),
                 ),
               ),
             ),

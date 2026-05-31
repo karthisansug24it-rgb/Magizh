@@ -4,6 +4,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
@@ -11,6 +12,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_staggered_animations/flutter_staggered_animations.dart';
 import 'expenses_page.dart';
 import 'inventory_sheet.dart';
+import 'l10n/app_localizations.dart';
+import 'settings_page.dart';
 import 'theme/app_theme.dart';
 import 'checkout_sheet.dart';
 import 'dashboard_page.dart';
@@ -74,14 +77,22 @@ class SoundManager {
 
 
 
-class MagizhPosApp extends StatelessWidget {
+class MagizhPosApp extends ConsumerWidget {
   const MagizhPosApp({super.key});
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final locale = ref.watch(localeProvider);
     return MaterialApp(
       title: 'Magizh',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
+      locale: locale,
+      supportedLocales: appLanguages.map((language) => Locale(language.code)).toList(),
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
       home: const HomePage(),
     );
   }
@@ -218,27 +229,27 @@ class _HomePageState extends ConsumerState<HomePage> {
   TimeSlotConfig _timeSlotConfig(TimeSlot slot) {
     switch (slot) {
       case TimeSlot.morning:
-        return const TimeSlotConfig(
+        return TimeSlotConfig(
           slot: TimeSlot.morning,
-          title: 'Morning Fresh Delights 🌅',
-          subtitle: 'Hot coffee, fresh tea, healthy breakfast snacks, and warm pastries available now.',
-          tag: 'MORNING SNACKS',
+          title: context.t('morningTitle'),
+          subtitle: context.t('morningSubtitle'),
+          tag: context.t('morningTag'),
           icon: Icons.wb_sunny_rounded,
-          gradient: [Color(0xFF2D5016), Color(0xFF6BA84D)],
-          filterKeywords: ['morning', 'drink'],
-          addCategories: ['Morning Snacks', 'Drinks', 'Other'],
+          gradient: const [Color(0xFF2D5016), Color(0xFF6BA84D)],
+          filterKeywords: const ['morning', 'drink'],
+          addCategories: const ['Morning Snacks', 'Drinks', 'Other'],
         );
       case TimeSlot.evening:
-        return const TimeSlotConfig(
+        return TimeSlotConfig(
           slot: TimeSlot.evening,
-          title: 'Evening Crispy Bites 🌇',
-          subtitle: 'Puffs, juice, cake, cutlets, samosas & evening chai ready from 4 PM.',
-          tag: 'EVENING SNACKS',
+          title: context.t('eveningTitle'),
+          subtitle: context.t('eveningSubtitle'),
+          tag: context.t('eveningTag'),
           icon: Icons.nights_stay_rounded,
-          gradient: [Color(0xFFD4A574), Color(0xFFB58452)],
-          filterKeywords: ['evening', 'drink', 'puff', 'juice', 'cake', 'cutlet', 'samosa', 'samo', 'snack'],
-          filterProductNames: ['puff', 'juice', 'cake', 'cutlet', 'samosa', 'samo'],
-          addCategories: ['Puff', 'Samosa', 'Cake', 'Cutlet', 'Drinks', 'Evening Snacks', 'Other'],
+          gradient: const [Color(0xFFD4A574), Color(0xFFB58452)],
+          filterKeywords: const ['evening', 'drink', 'puff', 'juice', 'cake', 'cutlet', 'samosa', 'samo', 'snack'],
+          filterProductNames: const ['puff', 'juice', 'cake', 'cutlet', 'samosa', 'samo'],
+          addCategories: const ['Puff', 'Samosa', 'Cake', 'Cutlet', 'Drinks', 'Evening Snacks', 'Other'],
         );
     }
   }
@@ -274,18 +285,17 @@ class _HomePageState extends ConsumerState<HomePage> {
           _updateProduct(product['id'], updates, null);
         },
         onCreateNew: () {
-          // Add small delay to let current sheet pop
-          Future.microtask(() {
-            showModalBottomSheet<void>(
-              context: context,
-              isScrollControlled: true,
-              backgroundColor: Colors.white,
-              builder: (context) => AddProductSheet(
-                categories: config.addCategories,
-                onAdd: (name, price, category, imagePath) => _saveProductOptimistically(name, price, category, imagePath),
-              ),
-            );
-          });
+          if (!mounted) return;
+          showModalBottomSheet<void>(
+            context: this.context,
+            isScrollControlled: true,
+            backgroundColor: Colors.white,
+            builder: (context) => AddProductSheet(
+              categories: config.addCategories,
+                onAdd: (name, price, category, imagePath, nameI18n, categoryI18n) =>
+                    _saveProductOptimistically(name, price, category, imagePath, nameI18n, categoryI18n),
+            ),
+          );
         },
       ),
     );
@@ -333,7 +343,7 @@ class _HomePageState extends ConsumerState<HomePage> {
     final filteredProducts = products.where((p) {
       final matchesCategory = selectedCategory == "All" || 
           p["category"].toString().toLowerCase() == selectedCategory.toLowerCase();
-      return matchesCategory && p["name"].toString().toLowerCase().contains(searchQuery);
+      return matchesCategory && context.productName(p).toLowerCase().contains(searchQuery);
     }).toList();
 
     return Scaffold(
@@ -355,7 +365,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                               child: CustomScrollView(
                                 slivers: [
                                   SliverToBoxAdapter(child: _buildPromoBanner()),
-                                  SliverToBoxAdapter(child: _buildCategories(categories)),
+                                  SliverToBoxAdapter(child: _buildCategories(categories, products)),
                                   if (filteredProducts.isEmpty)
                                     SliverFillRemaining(
                                       hasScrollBody: false,
@@ -406,7 +416,7 @@ class _HomePageState extends ConsumerState<HomePage> {
     );
   }
 
-  Widget _buildEmptyState() => const Center(child: Text("No products found"));
+  Widget _buildEmptyState() => Center(child: Text(context.t('noProducts')));
 
   Widget _buildErrorView() {
     final error = ref.watch(errorProvider);
@@ -418,13 +428,13 @@ class _HomePageState extends ConsumerState<HomePage> {
           children: [
             const Icon(Icons.cloud_off_rounded, size: 64, color: AppTheme.primary),
             const SizedBox(height: 16),
-            const Text(
-              "Connection Error",
+            Text(
+              context.t('connectionError'),
               style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppTheme.primary),
             ),
             const SizedBox(height: 8),
             Text(
-              error ?? "Could not connect to Supabase",
+              error ?? context.t('couldNotConnect'),
               textAlign: TextAlign.center,
               style: const TextStyle(color: AppTheme.primary),
             ),
@@ -432,7 +442,7 @@ class _HomePageState extends ConsumerState<HomePage> {
             ElevatedButton.icon(
               onPressed: _fetchProducts,
               icon: const Icon(Icons.refresh),
-              label: const Text("Retry Connection"),
+              label: Text(context.t('retryConnection')),
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppTheme.primary,
                 foregroundColor: Colors.white,
@@ -461,7 +471,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                     const Icon(Icons.waving_hand_rounded, size: 14, color: AppTheme.gold),
                     const SizedBox(width: 6),
                     Text(
-                      "WELCOME BACK! 👋",
+                      context.t('welcomeBack'),
                       style: GoogleFonts.poppins(
                         fontSize: 9,
                         fontWeight: FontWeight.bold,
@@ -532,7 +542,7 @@ class _HomePageState extends ConsumerState<HomePage> {
             color: AppTheme.textPrimary,
           ),
           decoration: InputDecoration(
-            hintText: "Search freshly baked items...",
+            hintText: context.t('searchHint'),
             hintStyle: GoogleFonts.roboto(
               fontSize: 14,
               color: AppTheme.textLight,
@@ -656,7 +666,7 @@ class _HomePageState extends ConsumerState<HomePage> {
     );
   }
 
-  Widget _buildCategories(List<String> categories) {
+  Widget _buildCategories(List<String> categories, List<Map<String, dynamic>> products) {
     final selectedCategory = ref.watch(selectedCategoryProvider);
     return SizedBox(
       height: 64,
@@ -698,7 +708,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                   ),
                   alignment: Alignment.center,
                   child: Text(
-                    cat,
+                    _categoryLabel(cat, products),
                     style: GoogleFonts.poppins(
                       color: isSelected ? Colors.white : AppTheme.textSecondary,
                       fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
@@ -761,15 +771,6 @@ class _HomePageState extends ConsumerState<HomePage> {
   }
 
   Widget _buildBottomNav(BuildContext context) {
-    final products = ref.watch(productsProvider);
-    final tapCounts = ref.watch(tapCountsProvider);
-    final selectedCount = tapCounts.values.fold<int>(0, (sum, count) => sum + count);
-    final total = tapCounts.entries.fold<double>(0, (sum, entry) {
-      final match = products.firstWhere((p) => p["id"] == entry.key, orElse: () => {});
-      final price = match["price"] is num ? (match["price"] as num).toDouble() : 0.0;
-      return sum + (price * entry.value);
-    });
-
     return Positioned(
       bottom: 0,
       left: 0, right: 0,
@@ -794,8 +795,8 @@ class _HomePageState extends ConsumerState<HomePage> {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceAround,
                   children: [
-                    _buildWhatsAppNavItem(Icons.home, "Home", true, () {}),
-                    _buildWhatsAppNavItem(Icons.inventory_2_outlined, "Inventory", false, () {
+                    _buildWhatsAppNavItem(Icons.home, context.t('home'), true, () {}),
+                    _buildWhatsAppNavItem(Icons.inventory_2_outlined, context.t('inventory'), false, () {
                       Haptics.light();
                       showModalBottomSheet(
                         context: context,
@@ -813,13 +814,17 @@ class _HomePageState extends ConsumerState<HomePage> {
                         builder: (context) => const InventorySheet(),
                       );
                     }),
-                    _buildWhatsAppNavItem(Icons.receipt_long_outlined, "Expense", false, () {
+                    _buildWhatsAppNavItem(Icons.receipt_long_outlined, context.t('expense'), false, () {
                       Haptics.light();
                       Navigator.push(context, MaterialPageRoute(builder: (_) => const ExpensesPage()));
                     }),
-                    _buildWhatsAppNavItem(Icons.bar_chart_rounded, "Analytics", false, () {
+                    _buildWhatsAppNavItem(Icons.bar_chart_rounded, context.t('analytics'), false, () {
                       Haptics.light();
                       Navigator.push(context, MaterialPageRoute(builder: (_) => const DashboardPage()));
+                    }),
+                    _buildWhatsAppNavItem(Icons.settings_outlined, context.t('settings'), false, () {
+                      Haptics.light();
+                      Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsPage()));
                     }),
                   ],
                 ),
@@ -832,31 +837,47 @@ class _HomePageState extends ConsumerState<HomePage> {
   }
 
   Widget _buildWhatsAppNavItem(IconData icon, String label, bool isSelected, VoidCallback onTap) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              icon, 
-              color: isSelected ? AppTheme.primary : AppTheme.primary.withValues(alpha: 0.6), 
-              size: 24,
-            ),
-            const SizedBox(height: 2),
-            Text(
-              label, 
-              style: TextStyle(
-                color: isSelected ? AppTheme.primary : AppTheme.primary.withValues(alpha: 0.6), 
-                fontSize: 11, 
-                fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400
+    return Expanded(
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                icon,
+                color: isSelected ? AppTheme.primary : AppTheme.primary.withValues(alpha: 0.6),
+                size: 24,
               ),
-            ),
-          ],
+              const SizedBox(height: 2),
+              Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: isSelected ? AppTheme.primary : AppTheme.primary.withValues(alpha: 0.6),
+                  fontSize: 10.5,
+                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
+  }
+
+  String _categoryLabel(String category, List<Map<String, dynamic>> products) {
+    if (category == 'All') return context.t('all');
+    if (category == 'Other') return context.t('other');
+    final match = products.firstWhere(
+      (product) => (product['category'] ?? '').toString().toLowerCase() == category.toLowerCase(),
+      orElse: () => const <String, dynamic>{},
+    );
+    if (match.isEmpty) return category;
+    final translated = context.productCategory(match);
+    return translated.isEmpty ? category : translated;
   }
 
   Future<void> _openAdminAddProductSheet() async {
@@ -866,30 +887,64 @@ class _HomePageState extends ConsumerState<HomePage> {
       backgroundColor: Colors.white,
       builder: (context) => AddProductSheet(
         categories: ["Puff", "Samosa", "Roll", "Drinks", "Sandwich", "Other"],
-        onAdd: (name, price, category, imagePath) => _saveProductOptimistically(name, price, category, imagePath),
+        onAdd: (name, price, category, imagePath, nameI18n, categoryI18n) =>
+            _saveProductOptimistically(name, price, category, imagePath, nameI18n, categoryI18n),
       ),
     );
   }
 
-  Future<void> _saveProductOptimistically(String name, double price, String category, String localPath) async {
+  Future<void> _saveProductOptimistically(
+    String name,
+    double price,
+    String category,
+    String localPath,
+    Map<String, String> nameI18n,
+    Map<String, String> categoryI18n,
+  ) async {
     final tempId = 'temp_${DateTime.now().millisecondsSinceEpoch}';
-    final tempProduct = {'id': tempId, 'name': name, 'price': price, 'category': category, 'image_url': localPath, 'is_active': true, 'is_syncing': true};
+    final tempProduct = {
+      'id': tempId,
+      'name': name,
+      'price': price,
+      'category': category,
+      'name_i18n': nameI18n,
+      'category_i18n': categoryI18n,
+      'image_url': localPath,
+      'is_active': true,
+      'is_syncing': true,
+    };
     ref.read(productsProvider.notifier).updateState((state) => [tempProduct, ...state]);
     try {
-      await _saveProductToSupabase(name, price, category, localPath, tempId);
+      await _saveProductToSupabase(name, price, category, localPath, tempId, nameI18n, categoryI18n);
     } catch (e) {
       if (mounted) {
         ref.read(productsProvider.notifier).updateState((state) => state.where((p) => p['id'] != tempId).toList());
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.t('failed', args: {'error': e}))));
       }
     }
   }
 
-  Future<void> _saveProductToSupabase(String name, double price, String category, String localPath, String tempId) async {
+  Future<void> _saveProductToSupabase(
+    String name,
+    double price,
+    String category,
+    String localPath,
+    String tempId,
+    Map<String, String> nameI18n,
+    Map<String, String> categoryI18n,
+  ) async {
     final fileName = '${DateTime.now().millisecondsSinceEpoch}.jpg';
     await Supabase.instance.client.storage.from('product-images').upload(fileName, File(localPath));
     final publicUrl = Supabase.instance.client.storage.from('product-images').getPublicUrl(fileName);
-    final response = await Supabase.instance.client.from('products').insert({'name': name, 'price': price, 'category': category, 'image_url': publicUrl, 'is_active': true}).select().single();
+    final response = await Supabase.instance.client.from('products').insert({
+      'name': name,
+      'price': price,
+      'category': category,
+      'name_i18n': nameI18n,
+      'category_i18n': categoryI18n,
+      'image_url': publicUrl,
+      'is_active': true,
+    }).select().single();
     if (mounted) {
       ref.read(productsProvider.notifier).updateState((state) {
         final newState = List<Map<String, dynamic>>.from(state);
@@ -923,9 +978,14 @@ class _HomePageState extends ConsumerState<HomePage> {
         imageUrl = Supabase.instance.client.storage.from('product-images').getPublicUrl(fileName);
       }
 
+      final productUpdates = {...updates};
+      if (imageUrl != null) {
+        productUpdates['image_url'] = imageUrl;
+      }
+
       final response = await Supabase.instance.client
           .from('products')
-          .update({...updates, if (imageUrl != null) 'image_url': imageUrl})
+          .update(productUpdates)
           .eq('id', id)
           .select()
           .single();
@@ -937,11 +997,11 @@ class _HomePageState extends ConsumerState<HomePage> {
           if (index != -1) newState[index] = Map<String, dynamic>.from(response);
           return newState;
         });
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Product updated successfully!')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.t('productUpdated'))));
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Update failed: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.t('updateFailed', args: {'error': e}))));
       }
     }
   }
@@ -950,14 +1010,14 @@ class _HomePageState extends ConsumerState<HomePage> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text("Delete Product"),
-        content: const Text("Are you sure you want to delete this product?"),
+        title: Text(context.t('deleteProduct')),
+        content: Text(context.t('deleteProductConfirm')),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text("Cancel")),
+          TextButton(onPressed: () => Navigator.pop(context, false), child: Text(context.t('cancel'))),
           TextButton(
             onPressed: () => Navigator.pop(context, true), 
             style: TextButton.styleFrom(foregroundColor: AppTheme.primary),
-            child: const Text("Delete")
+            child: Text(context.t('delete'))
           ),
         ],
       ),
@@ -968,11 +1028,11 @@ class _HomePageState extends ConsumerState<HomePage> {
         await Supabase.instance.client.from('products').update({'is_active': false}).eq('id', id);
         if (mounted) {
           ref.read(productsProvider.notifier).updateState((state) => state.where((p) => p['id'] != id).toList());
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Product deleted')));
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.t('productDeleted'))));
         }
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Delete failed: $e')));
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.t('deleteFailed', args: {'error': e}))));
         }
       }
     }
@@ -1093,7 +1153,7 @@ class TimeSlotProductsPage extends ConsumerWidget {
         children: [
           Expanded(
             child: filteredProducts.isEmpty
-                ? const Center(child: Text("No products found for this time slot"))
+                ? Center(child: Text(context.t('noTimeSlotProducts')))
                 : _buildProductGrid(context, filteredProducts, categories),
           ),
           const CheckoutFloatingBar(),
@@ -1153,19 +1213,19 @@ class _ProductCardState extends ConsumerState<ProductCard> {
     final priceFontSize = isSmallScreen ? 14.0 : 16.0;
     
     // Deterministic rating based on product name/id
-    final double rating = 4.0 + (product['name'].toString().hashCode % 10) / 10.0;
+    final double rating = 4.0 + (context.productName(product).hashCode % 10) / 10.0;
     
     // Deterministic badge text based on product category
-    String badgeText = "Classic";
+    String badgeText = context.t('classic');
     final category = (product['category'] ?? '').toString().toLowerCase();
     if (category.contains('cake')) {
-      badgeText = "Specialty";
+      badgeText = context.t('specialty');
     } else if (category.contains('puff') || category.contains('samosa')) {
-      badgeText = "Fresh";
+      badgeText = context.t('fresh');
     } else if (category.contains('roll')) {
-      badgeText = "Popular";
+      badgeText = context.t('popular');
     } else if (category.contains('drink')) {
-      badgeText = "Chilled";
+      badgeText = context.t('chilled');
     }
 
     // Refined stock remaining pill with high-end dot indicator design (Larger text/dot size)
@@ -1194,7 +1254,7 @@ class _ProductCardState extends ConsumerState<ProductCard> {
             ),
             const SizedBox(width: 5),
             Text(
-              "Sold out",
+              context.t('soldOut'),
               style: GoogleFonts.poppins(
                 fontSize: isSmallScreen ? 10 : 11.5,
                 fontWeight: FontWeight.w700,
@@ -1224,7 +1284,7 @@ class _ProductCardState extends ConsumerState<ProductCard> {
             ),
             const SizedBox(width: 5),
             Text(
-              "$stockQty left",
+              context.t('leftCount', args: {'count': stockQty}),
               style: GoogleFonts.poppins(
                 fontSize: isSmallScreen ? 10 : 11.5,
                 fontWeight: FontWeight.w700,
@@ -1254,7 +1314,7 @@ class _ProductCardState extends ConsumerState<ProductCard> {
             ),
             const SizedBox(width: 5),
             Text(
-              "$stockQty available",
+              context.t('availableCount', args: {'count': stockQty}),
               style: GoogleFonts.poppins(
                 fontSize: isSmallScreen ? 10 : 11.5,
                 fontWeight: FontWeight.w700,
@@ -1350,7 +1410,7 @@ class _ProductCardState extends ConsumerState<ProductCard> {
                                 border: Border.all(color: Colors.white30, width: 1),
                               ),
                               child: Text(
-                                "SOLD OUT",
+                                context.t('soldOut').toUpperCase(),
                                 style: GoogleFonts.poppins(
                                   color: Colors.white,
                                   fontWeight: FontWeight.w900,
@@ -1483,7 +1543,7 @@ class _ProductCardState extends ConsumerState<ProductCard> {
               
               // Product Info Block
               Text(
-                product["name"],
+                context.productName(product),
                 style: GoogleFonts.poppins(
                   fontWeight: FontWeight.bold,
                   fontSize: titleFontSize,
@@ -1559,7 +1619,14 @@ class _ProductCardState extends ConsumerState<ProductCard> {
 
 class AddProductSheet extends StatefulWidget {
   final List<String> categories;
-  final Function(String name, double price, String category, String imagePath) onAdd;
+  final Function(
+    String name,
+    double price,
+    String category,
+    String imagePath,
+    Map<String, String> nameI18n,
+    Map<String, String> categoryI18n,
+  ) onAdd;
   const AddProductSheet({super.key, required this.categories, required this.onAdd});
   @override
   State<AddProductSheet> createState() => _AddProductSheetState();
@@ -1567,8 +1634,10 @@ class AddProductSheet extends StatefulWidget {
 
 class _AddProductSheetState extends State<AddProductSheet> {
   final _nameController = TextEditingController();
+  final _nameTaController = TextEditingController();
   final _priceController = TextEditingController();
   final _otherCategoryController = TextEditingController();
+  final _categoryTaController = TextEditingController();
   late String _category;
   XFile? _selectedImage;
   final ImagePicker _picker = ImagePicker();
@@ -1578,8 +1647,10 @@ class _AddProductSheetState extends State<AddProductSheet> {
   @override
   void dispose() { 
     _nameController.dispose(); 
+    _nameTaController.dispose();
     _priceController.dispose(); 
     _otherCategoryController.dispose();
+    _categoryTaController.dispose();
     super.dispose(); 
   }
 
@@ -1597,19 +1668,24 @@ class _AddProductSheetState extends State<AddProductSheet> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text("Add Product", style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
+            Text(context.t('addProduct'), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
             const SizedBox(height: 16),
             TextField(
               controller: _nameController,
-              decoration: const InputDecoration(labelText: "Product name", border: OutlineInputBorder()),
+              decoration: InputDecoration(labelText: context.t('productNameEnglish'), border: const OutlineInputBorder()),
               onChanged: (_) => setState(() {}),
             ),
             const SizedBox(height: 12),
-            TextField(controller: _priceController, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: "Price", border: OutlineInputBorder())),
+            TextField(
+              controller: _nameTaController,
+              decoration: InputDecoration(labelText: context.t('productNameTamil'), border: const OutlineInputBorder()),
+            ),
+            const SizedBox(height: 12),
+            TextField(controller: _priceController, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: InputDecoration(labelText: context.t('price'), border: const OutlineInputBorder())),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
-              value: _category,
-              decoration: const InputDecoration(labelText: "Category", border: OutlineInputBorder()),
+              initialValue: _category,
+              decoration: InputDecoration(labelText: context.t('categoryEnglish'), border: const OutlineInputBorder()),
               items: widget.categories.where((c) => c != "All").map((c) => DropdownMenuItem<String>(value: c, child: Text(c))).toList(),
               onChanged: (value) { if (value != null) setState(() => _category = value); },
             ),
@@ -1617,11 +1693,21 @@ class _AddProductSheetState extends State<AddProductSheet> {
               const SizedBox(height: 12),
               TextField(
                 controller: _otherCategoryController,
-                decoration: const InputDecoration(labelText: "Enter new category name", border: OutlineInputBorder(), hintText: "e.g. Pizza, Cake"),
+                decoration: InputDecoration(labelText: context.t('enterNewCategory'), border: const OutlineInputBorder(), hintText: context.t('categoryHint')),
               ),
             ],
             const SizedBox(height: 12),
-            SizedBox(width: double.infinity, child: OutlinedButton.icon(onPressed: _pickImage, icon: const Icon(Icons.photo_library_outlined), label: Text(_selectedImage == null ? "Choose photo" : "Photo selected"))),
+            TextField(
+              controller: _categoryTaController,
+              decoration: InputDecoration(labelText: context.t('categoryTamil'), border: const OutlineInputBorder()),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              context.t('tamilOptional'),
+              style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+            ),
+            const SizedBox(height: 12),
+            SizedBox(width: double.infinity, child: OutlinedButton.icon(onPressed: _pickImage, icon: const Icon(Icons.photo_library_outlined), label: Text(_selectedImage == null ? context.t('choosePhoto') : context.t('photoSelected')))),
             if (_selectedImage != null) ...[const SizedBox(height: 12), ClipRRect(borderRadius: BorderRadius.circular(12), child: Image.file(File(_selectedImage!.path), height: 120, width: double.infinity, fit: BoxFit.cover))],
             const SizedBox(height: 16),
             SizedBox(width: double.infinity, child: ElevatedButton(style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primary, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 14)), onPressed: () {
@@ -1632,16 +1718,25 @@ class _AddProductSheetState extends State<AddProductSheet> {
                 finalCategory = _otherCategoryController.text.trim();
               }
               if (name.isEmpty || price == null || price <= 0 || _selectedImage == null || (finalCategory == "Other" && finalCategory.isEmpty) || finalCategory.isEmpty) { 
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Enter valid name, price, category and choose a photo."))); 
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.t('validAddProduct')))); 
                 return; 
               }
-              widget.onAdd(name, price, finalCategory, _selectedImage!.path);
+              final nameI18n = _buildI18nMap(en: name, ta: _nameTaController.text.trim());
+              final categoryI18n = _buildI18nMap(en: finalCategory, ta: _categoryTaController.text.trim());
+              widget.onAdd(name, price, finalCategory, _selectedImage!.path, nameI18n, categoryI18n);
               Navigator.pop(context);
-            }, child: const Text("Add product"))),
+            }, child: Text(context.t('addProductButton')))),
           ],
         ),
       ),
     );
+  }
+
+  Map<String, String> _buildI18nMap({required String en, required String ta}) {
+    return {
+      'en': en,
+      if (ta.isNotEmpty) 'ta': ta,
+    };
   }
 }
 
@@ -1671,7 +1766,7 @@ class SelectExistingProductSheet extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  "Add to Card",
+                  context.t('addToCard'),
                   style: GoogleFonts.poppins(fontSize: 20, fontWeight: FontWeight.w700),
                 ),
                 TextButton.icon(
@@ -1680,7 +1775,7 @@ class SelectExistingProductSheet extends StatelessWidget {
                     onCreateNew();
                   },
                   icon: const Icon(Icons.add),
-                  label: Text("Create New", style: GoogleFonts.poppins()),
+                  label: Text(context.t('createNew'), style: GoogleFonts.poppins()),
                 ),
               ],
             ),
@@ -1704,11 +1799,11 @@ class SelectExistingProductSheet extends StatelessWidget {
                     ),
                   ),
                   title: Text(
-                    product['name'] ?? '',
+                    context.productName(product),
                     style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 16, color: AppTheme.textPrimary),
                   ),
                   subtitle: Text(
-                    product['category'] ?? '',
+                    context.productCategory(product),
                     style: GoogleFonts.poppins(color: AppTheme.textSecondary, fontSize: 14),
                   ),
                   onTap: () {
@@ -1751,9 +1846,11 @@ class EditProductSheet extends StatefulWidget {
 
 class _EditProductSheetState extends State<EditProductSheet> {
   late TextEditingController _nameController;
+  late TextEditingController _nameTaController;
   late TextEditingController _priceController;
   late TextEditingController _stockController;
   late TextEditingController _otherCategoryController;
+  late TextEditingController _categoryTaController;
   late String _category;
   XFile? _selectedImage;
   final ImagePicker _picker = ImagePicker();
@@ -1762,10 +1859,16 @@ class _EditProductSheetState extends State<EditProductSheet> {
   void initState() { 
     super.initState(); 
     _nameController = TextEditingController(text: widget.product['name']);
+    _nameTaController = TextEditingController(
+      text: AppStrings.mapValue(widget.product['name_i18n'], 'ta') ?? '',
+    );
     _priceController = TextEditingController(text: widget.product['price'].toString());
     _stockController = TextEditingController(text: (widget.product['stock_qty'] ?? 0).toString());
     _category = widget.product['category'] ?? "Other";
     _otherCategoryController = TextEditingController();
+    _categoryTaController = TextEditingController(
+      text: AppStrings.mapValue(widget.product['category_i18n'], 'ta') ?? '',
+    );
     if (!widget.categories.contains(_category)) {
       _otherCategoryController.text = _category;
       _category = "Other";
@@ -1775,9 +1878,11 @@ class _EditProductSheetState extends State<EditProductSheet> {
   @override
   void dispose() { 
     _nameController.dispose(); 
+    _nameTaController.dispose();
     _priceController.dispose(); 
     _stockController.dispose();
     _otherCategoryController.dispose();
+    _categoryTaController.dispose();
     super.dispose(); 
   }
 
@@ -1800,7 +1905,7 @@ class _EditProductSheetState extends State<EditProductSheet> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text("Edit Product", style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
+                Text(context.t('editProduct'), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
                 IconButton(
                   icon: const Icon(Icons.delete_outline, color: AppTheme.primary),
                   onPressed: () {
@@ -1813,28 +1918,33 @@ class _EditProductSheetState extends State<EditProductSheet> {
             const SizedBox(height: 16),
             TextField(
               controller: _nameController,
-              decoration: const InputDecoration(labelText: "Product name", border: OutlineInputBorder()),
+              decoration: InputDecoration(labelText: context.t('productNameEnglish'), border: const OutlineInputBorder()),
               onChanged: (_) => setState(() {}),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _nameTaController,
+              decoration: InputDecoration(labelText: context.t('productNameTamil'), border: const OutlineInputBorder()),
             ),
             const SizedBox(height: 12),
             if (isAlwaysAvailable)
               TextField(
                 controller: _priceController,
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                decoration: const InputDecoration(labelText: "Price", border: OutlineInputBorder()),
+                decoration: InputDecoration(labelText: context.t('price'), border: const OutlineInputBorder()),
               )
             else
               Row(
                 children: [
-                  Expanded(child: TextField(controller: _priceController, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: "Price", border: OutlineInputBorder()))),
+                  Expanded(child: TextField(controller: _priceController, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: InputDecoration(labelText: context.t('price'), border: const OutlineInputBorder()))),
                   const SizedBox(width: 12),
-                  Expanded(child: TextField(controller: _stockController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: "Stock Qty", border: OutlineInputBorder()))),
+                  Expanded(child: TextField(controller: _stockController, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: context.t('stockQty'), border: const OutlineInputBorder()))),
                 ],
               ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
-              value: _category,
-              decoration: const InputDecoration(labelText: "Category", border: OutlineInputBorder()),
+              initialValue: _category,
+              decoration: InputDecoration(labelText: context.t('categoryEnglish'), border: const OutlineInputBorder()),
               items: widget.categories.where((c) => c != "All").map((c) => DropdownMenuItem<String>(value: c, child: Text(c))).toList(),
               onChanged: (value) { if (value != null) setState(() => _category = value); },
             ),
@@ -1842,12 +1952,22 @@ class _EditProductSheetState extends State<EditProductSheet> {
               const SizedBox(height: 12),
               TextField(
                 controller: _otherCategoryController,
-                decoration: const InputDecoration(labelText: "Enter new category name", border: OutlineInputBorder(), hintText: "e.g. Pizza, Cake"),
+                decoration: InputDecoration(labelText: context.t('enterNewCategory'), border: const OutlineInputBorder(), hintText: context.t('categoryHint')),
                 onChanged: (_) => setState(() {}),
               ),
             ],
             const SizedBox(height: 12),
-            SizedBox(width: double.infinity, child: OutlinedButton.icon(onPressed: _pickImage, icon: const Icon(Icons.photo_library_outlined), label: Text(_selectedImage == null ? "Change photo" : "New photo selected"))),
+            TextField(
+              controller: _categoryTaController,
+              decoration: InputDecoration(labelText: context.t('categoryTamil'), border: const OutlineInputBorder()),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              context.t('tamilOptional'),
+              style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+            ),
+            const SizedBox(height: 12),
+            SizedBox(width: double.infinity, child: OutlinedButton.icon(onPressed: _pickImage, icon: const Icon(Icons.photo_library_outlined), label: Text(_selectedImage == null ? context.t('changePhoto') : context.t('newPhotoSelected')))),
             const SizedBox(height: 16),
             SizedBox(width: double.infinity, child: ElevatedButton(style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primary, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 14)), onPressed: () {
               final name = _nameController.text.trim();
@@ -1858,21 +1978,34 @@ class _EditProductSheetState extends State<EditProductSheet> {
               }
               final alwaysAvailable = isAlwaysAvailableFields(name, finalCategory);
               if (name.isEmpty || price == null || price <= 0 || (finalCategory == "Other" && finalCategory.isEmpty) || finalCategory.isEmpty) { 
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Enter valid name, price and category."))); 
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.t('validEditProduct')))); 
                 return; 
               }
-              final updates = <String, dynamic>{'name': name, 'price': price, 'category': finalCategory};
+              final updates = <String, dynamic>{
+                'name': name,
+                'price': price,
+                'category': finalCategory,
+                'name_i18n': _buildI18nMap(en: name, ta: _nameTaController.text.trim()),
+                'category_i18n': _buildI18nMap(en: finalCategory, ta: _categoryTaController.text.trim()),
+              };
               if (!alwaysAvailable) {
                 final stock = int.tryParse(_stockController.text.trim()) ?? 0;
                 updates['stock_qty'] = stock;
               }
               widget.onUpdate(updates, _selectedImage?.path);
               Navigator.pop(context);
-            }, child: const Text("Save Changes"))),
+            }, child: Text(context.t('saveChanges')))),
           ],
         ),
       ),
     );
+  }
+
+  Map<String, String> _buildI18nMap({required String en, required String ta}) {
+    return {
+      'en': en,
+      if (ta.isNotEmpty) 'ta': ta,
+    };
   }
 }
 
@@ -1906,9 +2039,9 @@ class CheckoutFloatingBar extends ConsumerWidget {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Expanded(child: Text("Selected: $selectedCount", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis)),
+              Expanded(child: Text(context.t('selectedCount', args: {'count': selectedCount}), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis)),
               const SizedBox(width: 12),
-              Flexible(child: Text("Amount: ₹${total.toStringAsFixed(0)}", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis)),
+              Flexible(child: Text(context.t('amount', args: {'amount': total.toStringAsFixed(0)}), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis)),
             ],
           ),
         ),
@@ -1932,9 +2065,9 @@ class CheckoutFloatingBar extends ConsumerWidget {
                 side: BorderSide(color: AppTheme.primary, width: 1),
               ),
             ),
-            child: const Text(
-              "Continue",
-              style: TextStyle(
+            child: Text(
+              context.t('continue'),
+              style: const TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w600,
               ),

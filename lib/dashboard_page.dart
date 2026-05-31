@@ -1,10 +1,10 @@
-import 'dart:convert';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'l10n/app_localizations.dart';
 import 'theme/app_theme.dart';
 
 class DashboardPage extends ConsumerStatefulWidget {
@@ -21,7 +21,6 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
   // Processed Data
   double _monthlyRevenue = 0;
   int _monthlyOrders = 0;
-  int _yearlyOrders = 0;
   
   Map<int, int> _daysInMonthSales = {};
   Map<int, double> _monthsInYearSales = <int, double>{};
@@ -97,16 +96,21 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
     final now = DateTime.now();
     double currentMonthRevenue = 0;
     int currentMonthOrders = 0;
-    int currentYearOrders = 0;
-    
+
     Map<int, int> daysInMonthSales = {};
     Map<int, double> monthsInYearSales = {};
     Map<int, int> daysOfWeekSales = {};
     
     // Initialize maps
-    for (int i = 1; i <= 31; i++) daysInMonthSales[i] = 0;
-    for (int i = 1; i <= 12; i++) monthsInYearSales[i] = 0.0;
-    for (int i = 1; i <= 7; i++) daysOfWeekSales[i] = 0;
+    for (int i = 1; i <= 31; i++) {
+      daysInMonthSales[i] = 0;
+    }
+    for (int i = 1; i <= 12; i++) {
+      monthsInYearSales[i] = 0.0;
+    }
+    for (int i = 1; i <= 7; i++) {
+      daysOfWeekSales[i] = 0;
+    }
 
     for (final tx in data) {
       final amount = (tx['total_amount'] as num?)?.toDouble() ?? 0.0;
@@ -121,7 +125,6 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
       
       // Current Year Revenue per Month
       if (createdAt.year == now.year) {
-        currentYearOrders++;
         monthsInYearSales[createdAt.month] = (monthsInYearSales[createdAt.month] ?? 0) + amount;
       }
       
@@ -131,7 +134,6 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
 
     _monthlyRevenue = currentMonthRevenue;
     _monthlyOrders = currentMonthOrders;
-    _yearlyOrders = currentYearOrders;
     _daysInMonthSales = daysInMonthSales;
     _monthsInYearSales = monthsInYearSales;
     _daysOfWeekSales = daysOfWeekSales;
@@ -186,10 +188,16 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
 
   @override
   Widget build(BuildContext context) {
+    final localeName = Localizations.localeOf(context).toLanguageTag();
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
-        title: const Text("Analytics & Tracker", style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.primary)),
+        title: Text(
+          context.t('analyticsTitle'),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.primary),
+        ),
         backgroundColor: Colors.white,
         elevation: 0,
         centerTitle: true,
@@ -220,39 +228,39 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                   _buildDateSearch(),
                   const SizedBox(height: 32),
                   
-                  _buildSectionTitle("Daily Orders (This Month)"),
+                  _buildSectionTitle(context.t('dailyOrdersThisMonth')),
                   const SizedBox(height: 16),
                   _buildBarChartContainer(
                     _buildMonthlyDaysChart(), 
-                    "Orders by day for ${DateFormat('MMMM yyyy').format(DateTime.now())}",
+                    context.t('ordersByDayFor', args: {'period': DateFormat('MMMM yyyy', localeName).format(DateTime.now())}),
                     _touchedMonthlyIndex,
-                    "Day ${_touchedMonthlyIndex + 1}",
-                    "${_daysInMonthSales[_touchedMonthlyIndex + 1] ?? 0} Orders",
+                    context.t('dayNumber', args: {'day': _touchedMonthlyIndex + 1}),
+                    '${_daysInMonthSales[_touchedMonthlyIndex + 1] ?? 0} ${context.t('orders')}',
                     scrollableWidth: 1200, // Even larger width for all 31 thick bars and labels
                     controller: _monthlyScrollController,
                   ),
                   
                   const SizedBox(height: 32),
-                  _buildSectionTitle("Yearly Trend (This Year)"),
+                  _buildSectionTitle(context.t('yearlyTrendThisYear')),
                   const SizedBox(height: 16),
                   _buildBarChartContainer(
                     _buildYearlyTrendChart(), 
-                    "Total revenue trend per month for ${DateTime.now().year}",
+                    context.t('totalRevenueTrend', args: {'year': DateTime.now().year}),
                     _touchedYearlyIndex,
-                    DateFormat('MMMM').format(DateTime(2024, _touchedYearlyIndex == -1 ? 1 : _touchedYearlyIndex + 1)),
+                    DateFormat('MMMM', localeName).format(DateTime(2024, _touchedYearlyIndex == -1 ? 1 : _touchedYearlyIndex + 1)),
                     "₹${_monthsInYearSales[_touchedYearlyIndex + 1]?.toStringAsFixed(0) ?? '0'}",
                     scrollableWidth: 600, // Space for full Jan, Feb labels
                   ),
                   
                   const SizedBox(height: 32),
-                  _buildSectionTitle("Orders by Weekday (All Time)"),
+                  _buildSectionTitle(context.t('ordersByWeekday')),
                   const SizedBox(height: 16),
                   _buildBarChartContainer(
                     _buildWeeklyDaysChart(),
-                    "Which days are the busiest?",
+                    context.t('busiestDays'),
                     _touchedWeeklyIndex,
-                    ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][_touchedWeeklyIndex == -1 ? 0 : _touchedWeeklyIndex],
-                    "${_daysOfWeekSales[_touchedWeeklyIndex + 1] ?? 0} Orders"
+                    DateFormat.E(Localizations.localeOf(context).toLanguageTag()).format(DateTime(2024, 1, (_touchedWeeklyIndex == -1 ? 0 : _touchedWeeklyIndex) + 1)),
+                    '${_daysOfWeekSales[_touchedWeeklyIndex + 1] ?? 0} ${context.t('orders')}'
                   ),
                   
                   const SizedBox(height: 100), // Space for bottom nav
@@ -271,7 +279,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
   }
 
   Widget _buildSalaryCard() {
-    final monthName = DateFormat('MMMM').format(DateTime.now());
+    final monthName = DateFormat('MMMM', Localizations.localeOf(context).toLanguageTag()).format(DateTime.now());
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(24),
@@ -301,8 +309,8 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text("Current Month Salary", style: TextStyle(fontSize: 14, color: AppTheme.primary.withValues(alpha: 0.7), fontWeight: FontWeight.w600)),
-                    Text("$monthName Tracker", style: TextStyle(fontSize: 12, color: AppTheme.primary.withValues(alpha: 0.6))),
+                    Text(context.t('currentMonthSalary'), style: TextStyle(fontSize: 14, color: AppTheme.primary.withValues(alpha: 0.7), fontWeight: FontWeight.w600)),
+                    Text(context.t('monthTracker', args: {'month': monthName}), style: TextStyle(fontSize: 12, color: AppTheme.primary.withValues(alpha: 0.6))),
                   ],
                 ),
               ),
@@ -314,7 +322,9 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
             style: const TextStyle(fontSize: 42, fontWeight: FontWeight.w900, color: AppTheme.primary, letterSpacing: -1),
           ),
           const SizedBox(height: 8),
-          Row(
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
             children: [
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -322,25 +332,35 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                   color: Colors.green.shade50,
                   borderRadius: BorderRadius.circular(20),
                 ),
-                child: Text(
-                  "$_monthlyOrders total orders",
-                  style: TextStyle(color: Colors.green.shade700, fontWeight: FontWeight.bold, fontSize: 12),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 180),
+                  child: Text(
+                    context.t('totalOrders', args: {'count': _monthlyOrders}),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(color: Colors.green.shade700, fontWeight: FontWeight.bold, fontSize: 12),
+                  ),
                 ),
               ),
-              const SizedBox(width: 8),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 decoration: BoxDecoration(
                   color: AppTheme.primary.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(20),
                 ),
-                child: const Row(
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.trending_up, color: AppTheme.primary, size: 14),
-                    SizedBox(width: 4),
-                    Text(
-                      "Growth",
-                      style: TextStyle(color: AppTheme.primary, fontWeight: FontWeight.bold, fontSize: 12),
+                    const Icon(Icons.trending_up, color: AppTheme.primary, size: 14),
+                    const SizedBox(width: 4),
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 120),
+                      child: Text(
+                        context.t('growth'),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(color: AppTheme.primary, fontWeight: FontWeight.bold, fontSize: 12),
+                      ),
                     ),
                   ],
                 ),
@@ -367,38 +387,47 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Wrap(
+            spacing: 8,
+            runSpacing: 8,
             alignment: WrapAlignment.spaceBetween,
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              const Text("Search by Date", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.primary)),
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.chevron_left, color: AppTheme.primary),
-                    onPressed: _searchedDate == null ? null : () {
-                      final newDate = _searchedDate!.subtract(const Duration(days: 1));
-                      setState(() => _searchedDate = newDate);
-                      _calculateSearchedDate(newDate);
-                    },
-                  ),
-                  TextButton(
-                    onPressed: _pickDate,
-                    child: Text(
-                      _searchedDate == null ? "Select Date" : DateFormat('EEE, d MMM').format(_searchedDate!), 
-                      style: const TextStyle(color: AppTheme.primary, fontWeight: FontWeight.bold)
+              Text(
+                context.t('searchByDate'),
+                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.primary),
+              ),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.chevron_left, color: AppTheme.primary),
+                      onPressed: _searchedDate == null ? null : () {
+                        final newDate = _searchedDate!.subtract(const Duration(days: 1));
+                        setState(() => _searchedDate = newDate);
+                        _calculateSearchedDate(newDate);
+                      },
                     ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.chevron_right, color: AppTheme.primary),
-                    onPressed: _searchedDate == null ? null : () {
-                      final newDate = _searchedDate!.add(const Duration(days: 1));
-                      if (newDate.isAfter(DateTime.now())) return;
-                      setState(() => _searchedDate = newDate);
-                      _calculateSearchedDate(newDate);
-                    },
-                  ),
-                ],
+                    TextButton(
+                      onPressed: _pickDate,
+                      child: Text(
+                        _searchedDate == null ? context.t('selectDate') : DateFormat('EEE, d MMM', Localizations.localeOf(context).toLanguageTag()).format(_searchedDate!),
+                        maxLines: 1,
+                        style: const TextStyle(color: AppTheme.primary, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.chevron_right, color: AppTheme.primary),
+                      onPressed: _searchedDate == null ? null : () {
+                        final newDate = _searchedDate!.add(const Duration(days: 1));
+                        if (newDate.isAfter(DateTime.now())) return;
+                        setState(() => _searchedDate = newDate);
+                        _calculateSearchedDate(newDate);
+                      },
+                    ),
+                  ],
+                ),
               )
             ],
           ),
@@ -410,9 +439,9 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
-                _buildSearchStat("Orders", _searchedDateOrders.toString(), Icons.shopping_bag_outlined),
+                _buildSearchStat(context.t('orders'), _searchedDateOrders.toString(), Icons.shopping_bag_outlined),
                 Container(width: 1, height: 40, color: const Color(0xFFEEEEEE)),
-                _buildSearchStat("Revenue", "₹${_searchedDateRevenue.toInt()}", Icons.currency_rupee),
+                _buildSearchStat(context.t('revenue'), "₹${_searchedDateRevenue.toInt()}", Icons.currency_rupee),
               ],
             )
           ]
@@ -456,7 +485,13 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
       ),
       child: Column(
         children: [
-          Text(subtitle, style: TextStyle(fontSize: 14, color: AppTheme.primary.withValues(alpha: 0.7), fontWeight: FontWeight.w600)),
+          Text(
+            subtitle,
+            textAlign: TextAlign.center,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(fontSize: 14, color: AppTheme.primary.withValues(alpha: 0.7), fontWeight: FontWeight.w600),
+          ),
           const SizedBox(height: 20),
           if (touchedIndex != -1)
             TweenAnimationBuilder<double>(
@@ -466,7 +501,12 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                 opacity: val,
                 child: Column(
                 children: [
-                  Text(label, style: TextStyle(fontSize: 14, color: AppTheme.primary.withValues(alpha: 0.6), fontWeight: FontWeight.w500)),
+                  Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 14, color: AppTheme.primary.withValues(alpha: 0.6), fontWeight: FontWeight.w500),
+                  ),
                   const SizedBox(height: 8),
                   TweenAnimationBuilder<double>(
                     duration: const Duration(milliseconds: 500),
@@ -474,7 +514,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                     curve: Curves.easeOutCirc,
                     builder: (context, val, child) {
                       final prefix = value.contains('₹') ? '₹' : '';
-                      final suffix = value.contains('Orders') ? ' Orders' : '';
+                      final suffix = value.contains('₹') ? '' : ' ${context.t('orders')}';
                       return Text(
                         "$prefix${val.toStringAsFixed(0)}$suffix", 
                         style: GoogleFonts.inter(fontSize: 32, fontWeight: FontWeight.w900, color: AppTheme.primary, letterSpacing: -1)
@@ -585,7 +625,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                 alignment: Alignment.topRight,
                 padding: const EdgeInsets.only(right: 8, bottom: 4),
                 style: TextStyle(color: AppTheme.primary.withValues(alpha: 0.35), fontSize: 10, fontWeight: FontWeight.bold),
-                labelResolver: (_) => "AVG",
+                labelResolver: (_) => context.t('avg'),
               ),
             ),
           ],
@@ -632,7 +672,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
       }
     }
 
-    final monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    final localeName = Localizations.localeOf(context).toLanguageTag();
 
     return LineChart(
       LineChartData(
@@ -649,9 +689,10 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
               getTitlesWidget: (value, meta) {
                 final idx = value.toInt() - 1;
                 if (idx < 0 || idx >= 12) return const SizedBox.shrink();
+                final monthName = DateFormat('MMM', localeName).format(DateTime(DateTime.now().year, idx + 1));
                 return Padding(
                   padding: const EdgeInsets.only(top: 12),
-                  child: Text(monthNames[idx], style: GoogleFonts.inter(color: AppTheme.primary.withValues(alpha: 0.6), fontSize: 11, fontWeight: FontWeight.bold)),
+                  child: Text(monthName, style: GoogleFonts.inter(color: AppTheme.primary.withValues(alpha: 0.6), fontSize: 11, fontWeight: FontWeight.bold)),
                 );
               },
               reservedSize: 32,
@@ -826,7 +867,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                 alignment: Alignment.topRight,
                 padding: const EdgeInsets.only(right: 8, bottom: 4),
                 style: TextStyle(color: AppTheme.primary.withValues(alpha: 0.35), fontSize: 10, fontWeight: FontWeight.bold),
-                labelResolver: (_) => "AVG",
+                labelResolver: (_) => context.t('avg'),
               ),
             ),
           ],

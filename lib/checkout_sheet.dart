@@ -5,7 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 import 'main.dart'; // Access to tapCountsProvider, productsProvider, SoundManager, Haptics
-import 'expenses_page.dart';
+import 'l10n/app_localizations.dart';
 import 'theme/app_theme.dart';
 
 class CheckoutSheet extends ConsumerStatefulWidget {
@@ -69,6 +69,7 @@ class _CheckoutSheetState extends ConsumerState<CheckoutSheet> {
       orderItems.add({
         'product_id': productId,
         'product_name': product['name'],
+        'product_name_i18n': product['name_i18n'] ?? {'en': product['name']},
         'unit_price': price,
         'qty': qty,
         'line_total': lineTotal,
@@ -123,7 +124,7 @@ class _CheckoutSheetState extends ConsumerState<CheckoutSheet> {
         Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: const Text('Order placed successfully! 🎉'),
+            content: Text(context.t('orderSuccess')),
             backgroundColor: AppTheme.success,
             behavior: SnackBarBehavior.floating,
             duration: const Duration(seconds: 1),
@@ -136,7 +137,7 @@ class _CheckoutSheetState extends ConsumerState<CheckoutSheet> {
     } catch (e) {
       if (mounted) {
         setState(() => _isProcessing = false);
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error placing order: $e'), backgroundColor: Colors.red));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.t('errorPlacingOrder', args: {'error': e})), backgroundColor: Colors.red));
       }
     }
   }
@@ -170,7 +171,7 @@ class _CheckoutSheetState extends ConsumerState<CheckoutSheet> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text("Checkout", style: GoogleFonts.inter(fontSize: 22, fontWeight: FontWeight.bold, color: AppTheme.textPrimary)),
+                  Text(context.t('checkout'), style: GoogleFonts.inter(fontSize: 22, fontWeight: FontWeight.bold, color: AppTheme.textPrimary)),
                   IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(context)),
                 ],
               ),
@@ -185,13 +186,13 @@ class _CheckoutSheetState extends ConsumerState<CheckoutSheet> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text("Payment Method", style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppTheme.primary.withValues(alpha: 0.7))),
+                    Text(context.t('paymentMethod'), style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppTheme.primary.withValues(alpha: 0.7))),
                     const SizedBox(height: 12),
                     Row(
                       children: [
                         Expanded(
                           child: _PaymentMethodCard(
-                            title: "Online",
+                            title: context.t('online'),
                             icon: Icons.qr_code_rounded,
                             isSelected: _paymentMethod == 'Online',
                             onTap: () {
@@ -203,7 +204,7 @@ class _CheckoutSheetState extends ConsumerState<CheckoutSheet> {
                         const SizedBox(width: 12),
                         Expanded(
                           child: _PaymentMethodCard(
-                            title: "Cash",
+                            title: context.t('cash'),
                             icon: Icons.payments_outlined,
                             isSelected: _paymentMethod == 'Offline',
                             onTap: () {
@@ -216,7 +217,7 @@ class _CheckoutSheetState extends ConsumerState<CheckoutSheet> {
                     ),
                     
                     const SizedBox(height: 20),
-                    Text("Summary", style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppTheme.primary.withValues(alpha: 0.7))),
+                    Text(context.t('summary'), style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppTheme.primary.withValues(alpha: 0.7))),
                     const SizedBox(height: 8),
                     ...tapCounts.entries.map((e) {
                       final p = products.firstWhere((pr) => pr['id'] == e.key, orElse: () => {});
@@ -226,7 +227,7 @@ class _CheckoutSheetState extends ConsumerState<CheckoutSheet> {
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Expanded(child: Text("${p['name']} x ${e.value}", style: const TextStyle(fontSize: 14), overflow: TextOverflow.ellipsis)),
+                            Expanded(child: Text("${context.productName(p)} x ${e.value}", style: const TextStyle(fontSize: 14), overflow: TextOverflow.ellipsis)),
                             Text("₹${((p['price'] as num) * e.value).toStringAsFixed(0)}", style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
                           ],
                         ),
@@ -238,7 +239,7 @@ class _CheckoutSheetState extends ConsumerState<CheckoutSheet> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text("Total Amount", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                        Text(context.t('totalAmount'), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                         Text("₹${totalAmount.toStringAsFixed(0)}", style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: AppTheme.primary)),
                       ],
                     ),
@@ -246,7 +247,7 @@ class _CheckoutSheetState extends ConsumerState<CheckoutSheet> {
                     const SizedBox(height: 20),
                     
                     if (_paymentMethod == 'Offline') ...[
-                      Text("Cash Received", style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppTheme.primary.withValues(alpha: 0.7))),
+                      Text(context.t('cashReceived'), style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppTheme.primary.withValues(alpha: 0.7))),
                       const SizedBox(height: 12),
                       
                       Wrap(
@@ -281,7 +282,7 @@ class _CheckoutSheetState extends ConsumerState<CheckoutSheet> {
                         controller: _cashController,
                         keyboardType: TextInputType.number,
                         decoration: InputDecoration(
-                          hintText: "Enter amount",
+                          hintText: context.t('enterAmount'),
                           prefixText: "₹ ",
                           filled: true,
                           fillColor: Colors.grey.shade50,
@@ -302,7 +303,7 @@ class _CheckoutSheetState extends ConsumerState<CheckoutSheet> {
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             Text(
-                              _cashCollected >= totalAmount ? "Balance" : "Short",
+                              _cashCollected >= totalAmount ? context.t('balance') : context.t('short'),
                               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: _cashCollected >= totalAmount ? Colors.green.shade700 : Colors.red.shade700),
                             ),
                             Text(
@@ -336,7 +337,7 @@ class _CheckoutSheetState extends ConsumerState<CheckoutSheet> {
                   onPressed: (_isProcessing || (_paymentMethod == 'Offline' && _cashCollected < totalAmount)) ? null : _processOrder,
                   child: _isProcessing
                       ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                      : Text("Confirm Order (₹${totalAmount.toStringAsFixed(0)})", style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+                      : Text(context.t('confirmOrder', args: {'amount': totalAmount.toStringAsFixed(0)}), style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
                 ),
               ),
             ),
