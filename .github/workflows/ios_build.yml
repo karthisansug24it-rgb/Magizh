@@ -30,20 +30,20 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
-      - name: Build iOS (No Codesign)
-        # This compiles the app for iOS to verify all plugins and code work,
-        # but skips the Apple Developer certificate signing step.
-        run: flutter build ios --release --no-codesign
+      - name: Build iOS (Simulator)
+        # This compiles the app for the iOS simulator to verify all plugins and code work,
+        # completely bypassing the Apple Developer certificate signing step.
+        run: flutter build ios --simulator
 
       - name: Zip the output payload
         run: |
-          cd build/ios/iphoneos
+          cd build/ios/iphonesimulator
           mkdir -p Payload
           cp -r Runner.app Payload/
-          zip -q -r UnsignedApp.ipa Payload
+          zip -q -r SimulatorApp.zip Payload
           
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ios-unsigned-ipa
-          path: build/ios/iphoneos/UnsignedApp.ipa
+          name: ios-simulator-app
+          path: build/ios/iphonesimulator/SimulatorApp.zip
