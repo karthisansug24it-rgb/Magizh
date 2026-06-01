@@ -4,6 +4,9 @@
 
   packages = [
     pkgs.flutter
+    pkgs.cmake
+    pkgs.ninja
+    pkgs.clang
   ];
 
   idx = {
