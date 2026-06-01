@@ -41,11 +41,10 @@ jobs:
         run: flutter build ios --simulator
 
       - name: Zip the Simulator payload
+        # Appetize.io expects the .app folder to be at the root of the .zip file
         run: |
           cd build/ios/iphonesimulator
-          mkdir -p Payload
-          cp -r Runner.app Payload/
-          zip -q -r SimulatorApp.zip Payload
+          zip -q -r SimulatorApp.zip Runner.app
           
       - name: Upload Simulator Artifact
         uses: actions/upload-artifact@v4
