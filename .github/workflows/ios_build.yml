@@ -40,15 +40,37 @@ jobs:
         # completely bypassing the Apple Developer certificate signing step.
         run: flutter build ios --simulator
 
-      - name: Zip the output payload
+      - name: Zip the Simulator payload
         run: |
           cd build/ios/iphonesimulator
           mkdir -p Payload
           cp -r Runner.app Payload/
           zip -q -r SimulatorApp.zip Payload
           
-      - name: Upload Artifact
+      - name: Upload Simulator Artifact
         uses: actions/upload-artifact@v4
         with:
           name: ios-simulator-app
           path: build/ios/iphonesimulator/SimulatorApp.zip
+
+      - name: Disable Code Signing for Physical Device Build
+        # This forces Xcode to ignore the missing Development Team when building for physical devices
+        run: |
+          echo "CODE_SIGNING_ALLOWED=NO" >> ios/Flutter/Release.xcconfig
+          echo "CODE_SIGNING_REQUIRED=NO" >> ios/Flutter/Release.xcconfig
+
+      - name: Build iOS (Unsigned Device IPA)
+        run: flutter build ios --release --no-codesign
+
+      - name: Zip the Unsigned IPA payload
+        run: |
+          cd build/ios/iphoneos
+          mkdir -p Payload
+          cp -r Runner.app Payload/
+          zip -q -r Magizh_Unsigned.ipa Payload
+          
+      - name: Upload Unsigned IPA Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-unsigned-ipa
+          path: build/ios/iphoneos/Magizh_Unsigned.ipa
