@@ -105,46 +105,72 @@ class _InventorySheetState extends ConsumerState<InventorySheet> {
       return context.productName(p).toLowerCase().contains(_searchQuery.toLowerCase());
     }).toList();
 
-    return Container(
-      height: MediaQuery.of(context).size.height * 0.95,
-      padding: const EdgeInsets.fromLTRB(20, 24, 20, 0),
-      child: Column(
+    return Scaffold(
+      backgroundColor: Colors.white,
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: AppTheme.primary),
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: Text(
+          context.t('inventory'),
+          style: const TextStyle(
+            fontWeight: FontWeight.bold,
+            color: AppTheme.primary,
+            fontSize: 18,
+          ),
+        ),
+        centerTitle: true,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.add_rounded, color: AppTheme.primary),
+            tooltip: context.t('add'),
+            onPressed: _openAddProductsSheet,
+          ),
+        ],
+      ),
+      body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            context.t('inventory'),
-            style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: AppTheme.primary),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            context.t('adjustInventory'),
-            style: TextStyle(fontSize: 14, color: AppTheme.primary.withValues(alpha: 0.7)),
-          ),
-          const SizedBox(height: 16),
-          // Search Bar
-          Container(
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.grey.shade300),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+            child: Text(
+              context.t('adjustInventory'),
+              style: TextStyle(fontSize: 13, color: AppTheme.primary.withValues(alpha: 0.7)),
             ),
-            child: TextField(
-              controller: _searchController,
-              onChanged: (val) => setState(() => _searchQuery = val),
-              decoration: InputDecoration(
-                hintText: context.t('searchProducts'),
-                prefixIcon: const Icon(Icons.search, color: AppTheme.primary),
-                border: InputBorder.none,
-                contentPadding: const EdgeInsets.symmetric(vertical: 14),
+          ),
+          const SizedBox(height: 12),
+          // Search Bar
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.grey.shade300),
+              ),
+              child: TextField(
+                controller: _searchController,
+                onChanged: (val) => setState(() => _searchQuery = val),
+                decoration: InputDecoration(
+                  hintText: context.t('searchProducts'),
+                  prefixIcon: const Icon(Icons.search, color: AppTheme.primary),
+                  border: InputBorder.none,
+                  contentPadding: const EdgeInsets.symmetric(vertical: 14),
+                ),
               ),
             ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 12),
           // List
           Expanded(
             child: ListView.separated(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
               itemCount: filteredProducts.length,
-              separatorBuilder: (context, index) => const Divider(height: 24, color: Color(0xFFEEEEEE)),
+              separatorBuilder: (context, index) =>
+                  const Divider(height: 24, color: Color(0xFFEEEEEE)),
               itemBuilder: (context, index) {
                 final p = filteredProducts[index];
                 final id = p['id'];
@@ -154,7 +180,6 @@ class _InventorySheetState extends ConsumerState<InventorySheet> {
 
                 return Row(
                   children: [
-                    // Image
                     ClipRRect(
                       borderRadius: BorderRadius.circular(8),
                       child: SizedBox(
@@ -164,23 +189,33 @@ class _InventorySheetState extends ConsumerState<InventorySheet> {
                       ),
                     ),
                     const SizedBox(width: 12),
-                    // Name & Category
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(context.productName(p), style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16, color: Colors.black)),
-                          Text(context.productCategory(p).isEmpty ? context.t('notAvailable') : context.productCategory(p), style: TextStyle(color: AppTheme.primary.withValues(alpha: 0.7), fontSize: 13)),
+                          Text(context.productName(p),
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 16,
+                                  color: Colors.black)),
+                          Text(
+                            context.productCategory(p).isEmpty
+                                ? context.t('notAvailable')
+                                : context.productCategory(p),
+                            style: TextStyle(
+                                color: AppTheme.primary.withValues(alpha: 0.7),
+                                fontSize: 13),
+                          ),
                         ],
                       ),
                     ),
-                    // Controls
                     if (alwaysAvailable)
                       Row(
                         children: [
                           const SizedBox(width: 110),
                           IconButton(
-                            icon: const Icon(Icons.delete_outline, color: AppTheme.primary),
+                            icon: const Icon(Icons.delete_outline,
+                                color: AppTheme.primary),
                             onPressed: () => _markForDeletion(id),
                           ),
                         ],
@@ -189,8 +224,10 @@ class _InventorySheetState extends ConsumerState<InventorySheet> {
                       Row(
                         children: [
                           IconButton(
-                            icon: const Icon(Icons.remove_circle_outline, color: AppTheme.primary),
-                            onPressed: () => _updateStock(id, -1, originalStock),
+                            icon: const Icon(Icons.remove_circle_outline,
+                                color: AppTheme.primary),
+                            onPressed: () =>
+                                _updateStock(id, -1, originalStock),
                           ),
                           SizedBox(
                             width: 55,
@@ -206,74 +243,75 @@ class _InventorySheetState extends ConsumerState<InventorySheet> {
                               keyboardType: TextInputType.number,
                               decoration: InputDecoration(
                                 isDense: true,
-                                contentPadding: const EdgeInsets.symmetric(vertical: 8),
-                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: Colors.grey.shade300)),
-                                enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: Colors.grey.shade300)),
+                                contentPadding:
+                                    const EdgeInsets.symmetric(vertical: 8),
+                                border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                    borderSide: BorderSide(
+                                        color: Colors.grey.shade300)),
+                                enabledBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                    borderSide: BorderSide(
+                                        color: Colors.grey.shade300)),
                               ),
-                              controller: TextEditingController(text: "$displayStock"),
-                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.black),
+                              controller:
+                                  TextEditingController(text: "$displayStock"),
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 14,
+                                  color: Colors.black),
                             ),
                           ),
                           IconButton(
-                            icon: const Icon(Icons.add_circle_outline, color: AppTheme.primary),
-                            onPressed: () => _updateStock(id, 1, originalStock),
+                            icon: const Icon(Icons.add_circle_outline,
+                                color: AppTheme.primary),
+                            onPressed: () =>
+                                _updateStock(id, 1, originalStock),
                           ),
                           IconButton(
-                            icon: const Icon(Icons.delete_outline, color: AppTheme.primary),
+                            icon: const Icon(Icons.delete_outline,
+                                color: AppTheme.primary),
                             onPressed: () => _markForDeletion(id),
                           ),
                         ],
-                      )
+                      ),
                   ],
                 );
               },
             ),
           ),
-          // Bottom Buttons
-          SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.only(top: 12, bottom: 12),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (_stockChanges.isNotEmpty || _productsToDelete.isNotEmpty)
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppTheme.primary,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        ),
-                        icon: _isSaving
-                            ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                            : const Icon(Icons.save_outlined),
-                        label: Text(_isSaving ? context.t('saving') : context.t('save')),
-                        onPressed: _isSaving ? null : _saveChanges,
-                      ),
-                    ),
-                  if (_stockChanges.isNotEmpty || _productsToDelete.isNotEmpty) const SizedBox(height: 10),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppTheme.primary,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      ),
-                      icon: const Icon(Icons.add),
-                      label: Text(context.t('add')),
-                      onPressed: _openAddProductsSheet,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
         ],
       ),
+      // Save button in bottom bar
+      bottomNavigationBar: (_stockChanges.isNotEmpty || _productsToDelete.isNotEmpty)
+          ? SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.primary,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
+                    ),
+                    icon: _isSaving
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                                color: Colors.white, strokeWidth: 2))
+                        : const Icon(Icons.save_outlined),
+                    label: Text(
+                        _isSaving ? context.t('saving') : context.t('save')),
+                    onPressed: _isSaving ? null : _saveChanges,
+                  ),
+                ),
+              ),
+            )
+          : null,
     );
   }
 

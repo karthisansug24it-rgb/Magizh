@@ -158,33 +158,108 @@ class ErrorNotifier extends Notifier<String?> {
 }
 final errorProvider = NotifierProvider<ErrorNotifier, String?>(ErrorNotifier.new);
 
+/// Stores custom categories added by the user via the + button.
+/// These are kept in memory so they show up even before any product is assigned.
+/// Associated with the TimeSlot they were created in (null for global).
+class CustomCategoriesNotifier extends Notifier<Map<String, TimeSlot?>> {
+  @override
+  Map<String, TimeSlot?> build() => {};
+  void add(String cat, {TimeSlot? slot}) {
+    if (!state.containsKey(cat)) {
+      state = {...state, cat: slot};
+    }
+  }
+  void remove(String cat) {
+    final newState = Map<String, TimeSlot?>.from(state);
+    newState.remove(cat);
+    state = newState;
+  }
+  void rename(String oldName, String newName) {
+    if (!state.containsKey(oldName)) return;
+    final newState = Map<String, TimeSlot?>.from(state);
+    final slot = newState.remove(oldName);
+    newState[newName] = slot;
+    state = newState;
+  }
+}
+final customCategoriesProvider =
+    NotifierProvider<CustomCategoriesNotifier, Map<String, TimeSlot?>>(
+        CustomCategoriesNotifier.new);
+
+/// Stores products hidden per time slot only (not globally deleted).
+class HiddenSlotProductsNotifier
+    extends Notifier<Map<TimeSlot, Set<String>>> {
+  @override
+  Map<TimeSlot, Set<String>> build() => {};
+
+  void hide(TimeSlot slot, String productId) {
+    final updated = Map<TimeSlot, Set<String>>.from(state);
+    updated[slot] = {...(updated[slot] ?? {}), productId};
+    state = updated;
+  }
+
+  bool isHidden(TimeSlot slot, String productId) =>
+      (state[slot] ?? {}).contains(productId);
+}
+
+final hiddenSlotProductsProvider = NotifierProvider<
+    HiddenSlotProductsNotifier,
+    Map<TimeSlot, Set<String>>>(HiddenSlotProductsNotifier.new);
+
+/// Stores categories hidden per time slot only (not globally deleted).
+class HiddenSlotCategoriesNotifier
+    extends Notifier<Map<TimeSlot, Set<String>>> {
+  @override
+  Map<TimeSlot, Set<String>> build() => {};
+
+  void hide(TimeSlot slot, String category) {
+    final updated = Map<TimeSlot, Set<String>>.from(state);
+    updated[slot] = {...(updated[slot] ?? {}), category};
+    state = updated;
+  }
+
+  bool isHidden(TimeSlot slot, String category) =>
+      (state[slot] ?? {}).contains(category);
+}
+
+final hiddenSlotCategoriesProvider = NotifierProvider<
+    HiddenSlotCategoriesNotifier,
+    Map<TimeSlot, Set<String>>>(HiddenSlotCategoriesNotifier.new);
+
 bool isAlwaysAvailableFields(String name, String category) {
   final normalizedName = name.toLowerCase();
   final normalizedCategory = category.toLowerCase();
-  final compactName = normalizedName.replaceAll(RegExp(r'[\s\-_]+'), '');
-  final compactCategory = normalizedCategory.replaceAll(RegExp(r'[\s\-_]+'), '');
-  final matchesName =
-      normalizedName.contains('tea') ||
-      normalizedName.contains('coffee') ||
-      normalizedName.contains('cofee') ||
-      normalizedName.contains('juice') ||
-      normalizedName.contains('rose milk') ||
-      compactName.contains('rosemilk');
-  final matchesCategory =
-      normalizedCategory.contains('tea') ||
-      normalizedCategory.contains('coffee') ||
-      normalizedCategory.contains('cofee') ||
-      normalizedCategory.contains('juice') ||
-      normalizedCategory.contains('drink') ||
-      normalizedCategory.contains('rose milk') ||
-      compactCategory.contains('rosemilk');
-  return matchesName || matchesCategory;
+
+  // Products that are "Unlimited" (never sold out)
+  // This includes Juice, Tea, Coffee, and generic items.
+  final unlimitedKeywords = [
+    'tea', 'coffee', 'juice', 'drink', 'beverage', 
+    'water', 'bottle', 'cover', 'bag',
+    'fresh lime', 'rose milk', 'milkshake', 'lassi'
+  ];
+  
+  return unlimitedKeywords.any((k) => 
+    normalizedName.contains(k) || normalizedCategory.contains(k)
+  );
 }
 
 bool isAlwaysAvailableProduct(Map<String, dynamic> product) {
   final name = (product['name'] ?? '').toString();
   final category = (product['category'] ?? '').toString();
   return isAlwaysAvailableFields(name, category);
+}
+
+/// Returns true if the product should be shown in ALL time slots (e.g. Water, Bags).
+bool isGlobalProduct(Map<String, dynamic> product) {
+  final name = (product['name'] ?? '').toString().toLowerCase();
+  final category = (product['category'] ?? '').toString().toLowerCase();
+  
+  // Only generic items are truly global and bypass slot filters
+  final globalKeywords = ['water', 'bottle', 'cover', 'bag'];
+  
+  return globalKeywords.any((k) => 
+    name.contains(k) || category.contains(k)
+  );
 }
 
 enum TimeSlot { morning, evening }
@@ -222,6 +297,8 @@ class HomePage extends ConsumerStatefulWidget {
 class _HomePageState extends ConsumerState<HomePage> {
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
+  late final AppLifecycleListener _lifecycleListener;
+  bool _isColdStart = true;
 
   @override
   void initState() {
@@ -229,8 +306,31 @@ class _HomePageState extends ConsumerState<HomePage> {
     _searchFocusNode.addListener(() {
       if (mounted) setState(() {});
     });
+
+    // Track lifecycle so we know when the app is resumed vs cold-started
+    _lifecycleListener = AppLifecycleListener(
+      onResume: () {
+        // App came back from background — mark as NOT a cold start
+        _isColdStart = false;
+      },
+    );
+
     Future.microtask(() {
       _fetchProducts();
+      // Show celebration only on cold start, after the first frame
+      if (_isColdStart) {
+        _isColdStart = false;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            showCelebration(
+              context,
+              'Welcome to மகிழ் Shop! 🙏',
+              icon: Icons.storefront_rounded,
+              bannerColor: AppTheme.primary,
+            );
+          }
+        });
+      }
     });
   }
 
@@ -238,6 +338,7 @@ class _HomePageState extends ConsumerState<HomePage> {
   void dispose() {
     _searchController.dispose();
     _searchFocusNode.dispose();
+    _lifecycleListener.dispose();
     super.dispose();
   }
 
@@ -251,8 +352,15 @@ class _HomePageState extends ConsumerState<HomePage> {
           tag: context.t('morningTag'),
           icon: Icons.wb_sunny_rounded,
           gradient: const [Color(0xFF2D5016), Color(0xFF6BA84D)],
-          filterKeywords: const ['morning', 'drink'],
-          addCategories: const ['Morning Snacks', 'Drinks', 'Other'],
+          // Morning: vadai, tea, samosa, paniyaram
+          filterKeywords: const [
+            'morning', 'morning slot', 'tea', 'vadai', 'vada', 'samosa', 'samo',
+            'paniyaram', 'paniyar', 'coffee',
+          ],
+          filterProductNames: const [
+            'vadai', 'vada', 'samosa', 'samo', 'paniyaram',
+          ],
+          addCategories: const ['Vadai', 'Tea', 'Samosa', 'Paniyaram', 'Morning Snacks', 'Morning Slot', 'Drinks', 'Other'],
         );
       case TimeSlot.evening:
         return TimeSlotConfig(
@@ -262,9 +370,20 @@ class _HomePageState extends ConsumerState<HomePage> {
           tag: context.t('eveningTag'),
           icon: Icons.nights_stay_rounded,
           gradient: const [Color(0xFFD4A574), Color(0xFFB58452)],
-          filterKeywords: const ['evening', 'drink', 'puff', 'juice', 'cake', 'cutlet', 'samosa', 'samo', 'snack'],
-          filterProductNames: const ['puff', 'juice', 'cake', 'cutlet', 'samosa', 'samo'],
-          addCategories: const ['Puff', 'Samosa', 'Cake', 'Cutlet', 'Drinks', 'Evening Snacks', 'Other'],
+          // Evening: juice, tea, vadai, puff, bonda, bajji, samosa
+          filterKeywords: const [
+            'evening', 'evening slot', 'eveing', 'juice', 'tea', 'vadai', 'vada',
+            'puff', 'bonda', 'bajji', 'bajjii', 'bhaji', 'samosa',
+            'samo', 'somos', 'coffee',
+          ],
+          filterProductNames: const [
+            'puff', 'juice', 'bonda', 'bajji', 'bajjii', 'bhaji',
+            'vadai', 'vada', 'samosa', 'samo', 'somos',
+          ],
+          addCategories: const [
+            'Juice', 'Tea', 'Vadai', 'Puff', 'Bonda', 'Bajji',
+            'Samosa', 'Evening Snacks', 'Evening Slot', 'Drinks', 'Other',
+          ],
         );
     }
   }
@@ -326,14 +445,52 @@ class _HomePageState extends ConsumerState<HomePage> {
           .eq('is_active', true)
           .order('name');
       if (mounted) {
-        ref.read(productsProvider.notifier).set(List<Map<String, dynamic>>.from(response));
+        final data = List<Map<String, dynamic>>.from(response);
+        ref.read(productsProvider.notifier).set(data);
         ref.read(isLoadingProvider.notifier).val = false;
+        // Auto-fix: reset stock_qty to null for any always-available product
+        // that mistakenly has stock_qty = 0 (would show "sold out")
+        _fixAlwaysAvailableStock(data);
       }
     } catch (e) {
       debugPrint('FETCH ERROR: $e');
       if (mounted) {
         ref.read(errorProvider.notifier).val = e.toString();
         ref.read(isLoadingProvider.notifier).val = false;
+      }
+    }
+  }
+
+  /// Silently resets stock_qty to null on Supabase for any product that is
+  /// always-available (tea, juice, etc.) but was saved with stock_qty = 0.
+  void _fixAlwaysAvailableStock(List<Map<String, dynamic>> products) {
+    for (final p in products) {
+      if (isAlwaysAvailableProduct(p)) {
+        final stockQty = (p['stock_qty'] as num?)?.toInt();
+        if (stockQty != null && stockQty <= 0) {
+          // Fire and forget — update DB in background
+          Supabase.instance.client
+              .from('products')
+              .update({'stock_qty': null})
+              .eq('id', p['id'])
+              .then((_) {
+                debugPrint('Fixed stock_qty for always-available product: ${p['name']}');
+              })
+              .catchError((e) {
+                debugPrint('Failed to fix stock for ${p['name']}: $e');
+              });
+          // Also fix local state immediately
+          if (mounted) {
+            ref.read(productsProvider.notifier).updateState((state) {
+              return state.map((item) {
+                if (item['id'] == p['id']) {
+                  return {...item, 'stock_qty': null};
+                }
+                return item;
+              }).toList();
+            });
+          }
+        }
       }
     }
   }
@@ -346,30 +503,127 @@ class _HomePageState extends ConsumerState<HomePage> {
     final searchQuery = ref.watch(searchProvider).toLowerCase();
     final tapCounts = ref.watch(tapCountsProvider);
     final selectedCount = tapCounts.values.fold<int>(0, (sum, count) => sum + count);
+    final selectedTimeSlot = ref.watch(selectedTimeSlotProvider);
 
     // Dynamic categories from products
     final List<String> categories = ["All"];
-    final existingCats = products.map((p) => p['category'] as String?).where((c) => c != null && c.isNotEmpty).cast<String>().toSet().toList()..sort();
-    categories.addAll(existingCats);
-    if (!categories.contains("Other")) {
+
+    // When a time slot is active, only show categories present in that slot's products
+    final List<Map<String, dynamic>> productsForCategories;
+    if (selectedTimeSlot != null) {
+      final cfg = _timeSlotConfig(selectedTimeSlot);
+      productsForCategories = products.where((p) {
+        final category = (p['category'] ?? '').toString().toLowerCase();
+        final name = context.productName(p).toLowerCase();
+        final matchesCategoryKeywords = cfg.filterKeywords.any((k) => category.contains(k));
+        final matchesNameKeywords = cfg.filterProductNames.any((k) => name.contains(k));
+        final isGlobal = isGlobalProduct(p) && category != 'other';
+        return matchesCategoryKeywords || matchesNameKeywords || isGlobal;
+      }).toList();
+    } else {
+      productsForCategories = products;
+    }
+
+    final existingCats = productsForCategories
+        .map((p) => p['category'] as String?)
+        .where((c) => c != null && c.isNotEmpty && c != 'Other')
+        .cast<String>()
+        .toSet()
+        .toList()
+      ..sort();
+
+    // Filter out categories hidden for the active slot
+    final hiddenCats = selectedTimeSlot != null
+        ? (ref.watch(hiddenSlotCategoriesProvider)[selectedTimeSlot] ?? {})
+        : <String>{};
+    final visibleCats = existingCats.where((c) {
+      if (hiddenCats.contains(c)) return false;
+
+      // Strict category filtering for slots: the category itself must match slot keywords or be always available
+      if (selectedTimeSlot != null) {
+        final cfg = _timeSlotConfig(selectedTimeSlot);
+        final normalizedCat = c.toLowerCase();
+        final matchesKeywords = cfg.filterKeywords.any((k) => normalizedCat.contains(k));
+        final isGlobal = isGlobalProduct({'category': c});
+        if (!matchesKeywords && !isGlobal) return false;
+      }
+      return true;
+    }).toList();
+    categories.addAll(visibleCats);
+
+    // Merge in custom categories added via the + button (not yet backed by products)
+    final customCats = ref.watch(customCategoriesProvider);
+    for (final entry in customCats.entries) {
+      final name = entry.key;
+      final slot = entry.value;
+
+      if (categories.contains(name) || name == 'Other' || hiddenCats.contains(name)) {
+        continue;
+      }
+
+      if (selectedTimeSlot != null) {
+        // If created in a specific slot, only show it in THAT slot (or Home)
+        if (slot != null && slot != selectedTimeSlot) continue;
+
+        // If created globally (Home screen), only show if it matches slot keywords or is always available
+        if (slot == null) {
+          final cfg = _timeSlotConfig(selectedTimeSlot);
+          final normalizedCat = name.toLowerCase();
+          final matchesKeywords = cfg.filterKeywords.any((k) => normalizedCat.contains(k));
+          final isGlobal = isGlobalProduct({'category': name});
+          if (!matchesKeywords && !isGlobal) continue;
+        }
+      }
+      categories.add(name);
+    }
+
+    // Ensure the selected category is always visible (unless it's All or Other which are handled)
+    if (selectedCategory != "All" && selectedCategory != "Other" && !categories.contains(selectedCategory)) {
+      categories.add(selectedCategory);
+    }
+
+    // Re-sort after merging (excluding "All" at index 0)
+    if (categories.length > 1) {
+      final sorted = categories.sublist(1)..sort();
+      categories.replaceRange(1, categories.length, sorted);
+    }
+
+    // "Other" always last
+    if (productsForCategories.any((p) => (p['category'] ?? '') == 'Other') ||
+        customCats.containsKey('Other')) {
       categories.add("Other");
     }
 
-    final selectedTimeSlot = ref.watch(selectedTimeSlotProvider);
     final filteredProducts = products.where((p) {
+      final productId = p['id'].toString();
+      
+      // Filter out products hidden for the active slot
+      if (selectedTimeSlot != null) {
+        final hiddenForSlot = ref.watch(hiddenSlotProductsProvider)[selectedTimeSlot] ?? {};
+        if (hiddenForSlot.contains(productId)) {
+          return false;
+        }
+      }
+
       final matchesCategory = selectedCategory == "All" ||
           p["category"].toString().toLowerCase() == selectedCategory.toLowerCase();
       final matchesSearch = context.productName(p).toLowerCase().contains(searchQuery);
 
-      // If a time slot is selected, ensure the product matches its filters
+      // If a category other than "All" is selected, we only care about that category and search.
+      // Slot keyword filtering is only for when "All" is selected.
+      if (selectedCategory != "All") {
+        return matchesCategory && matchesSearch;
+      }
+
+      // If a time slot is selected and "All" category is active, apply slot filters
       if (selectedTimeSlot != null) {
         final cfg = _timeSlotConfig(selectedTimeSlot);
         final category = (p['category'] ?? '').toString().toLowerCase();
         final name = context.productName(p).toLowerCase();
         final matchesCategoryKeywords = cfg.filterKeywords.any((k) => category.contains(k));
         final matchesNameKeywords = cfg.filterProductNames.any((k) => name.contains(k));
-        final isAlwaysAvailable = isAlwaysAvailableProduct(p) && category != 'other';
-        final matchesTimeSlot = matchesCategoryKeywords || matchesNameKeywords || isAlwaysAvailable;
+        final isGlobal = isGlobalProduct(p) && category != 'other';
+        final matchesTimeSlot = matchesCategoryKeywords || matchesNameKeywords || isGlobal;
         return matchesCategory && matchesSearch && matchesTimeSlot;
       }
 
@@ -575,17 +829,12 @@ class _HomePageState extends ConsumerState<HomePage> {
         child: TextField(
           controller: _searchController,
           focusNode: _searchFocusNode,
+          autofocus: false,
           onChanged: (value) => ref.read(searchProvider.notifier).val = value,
-          style: GoogleFonts.roboto(
-            fontSize: 15,
-            color: AppTheme.textPrimary,
-          ),
+          style: GoogleFonts.roboto(fontSize: 15, color: AppTheme.textPrimary),
           decoration: InputDecoration(
             hintText: context.t('searchHint'),
-            hintStyle: GoogleFonts.roboto(
-              fontSize: 14,
-              color: AppTheme.textLight,
-            ),
+            hintStyle: GoogleFonts.roboto(fontSize: 14, color: AppTheme.textLight),
             prefixIcon: const Icon(Icons.search_rounded, color: AppTheme.primary, size: 22),
             suffixIcon: _searchController.text.isNotEmpty
                 ? IconButton(
@@ -607,22 +856,44 @@ class _HomePageState extends ConsumerState<HomePage> {
   Widget _buildRecommendationsList(List<Map<String, dynamic>> allProducts) {
     final query = _searchController.text.toLowerCase();
     final selectedTimeSlot = ref.watch(selectedTimeSlotProvider);
+    final selectedCategory = ref.watch(selectedCategoryProvider);
 
     final recommended = allProducts.where((p) {
-      final name = context.productName(p).toLowerCase();
-      final category = (p['category'] ?? '').toString().toLowerCase();
-      final matchesQuery = name.contains(query) || category.contains(query);
-
+      final productId = p['id'].toString();
+      
+      // Filter out products hidden for the active slot
       if (selectedTimeSlot != null) {
+        final hiddenForSlot = ref.watch(hiddenSlotProductsProvider)[selectedTimeSlot] ?? {};
+        if (hiddenForSlot.contains(productId)) {
+          return false;
+        }
+      }
+
+      final category = (p['category'] ?? '').toString().toLowerCase();
+      final name = context.productName(p).toLowerCase();
+
+      // 1. Filter by selected category (if not "All")
+      if (selectedCategory != "All") {
+        if (category != selectedCategory.toLowerCase()) {
+          return false;
+        }
+      }
+
+      // 2. Filter by search query
+      final matchesQuery = name.contains(query) || category.contains(query);
+      if (!matchesQuery) return false;
+
+      // 3. Filter by time slot (only if "All" is selected)
+      if (selectedCategory == "All" && selectedTimeSlot != null) {
         final cfg = _timeSlotConfig(selectedTimeSlot);
         final matchesCategoryKeywords = cfg.filterKeywords.any((k) => category.contains(k));
         final matchesNameKeywords = cfg.filterProductNames.any((k) => name.contains(k));
-        final isAlwaysAvailable = isAlwaysAvailableProduct(p) && category != 'other';
-        final matchesTimeSlot = matchesCategoryKeywords || matchesNameKeywords || isAlwaysAvailable;
-        return matchesQuery && matchesTimeSlot;
+        final isGlobal = isGlobalProduct(p) && category != 'other';
+        final matchesTimeSlot = matchesCategoryKeywords || matchesNameKeywords || isGlobal;
+        return matchesTimeSlot;
       }
 
-      return matchesQuery;
+      return true;
     }).toList();
 
     if (recommended.isEmpty) {
@@ -813,6 +1084,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                 } else {
                   ref.read(selectedTimeSlotProvider.notifier).val = item.slot;
                 }
+                // Always reset category to "All" when slot changes
                 ref.read(selectedCategoryProvider.notifier).val = "All";
               },
               onLongPress: () {
@@ -954,6 +1226,8 @@ class _HomePageState extends ConsumerState<HomePage> {
 
   Widget _buildCategories(List<String> categories, List<Map<String, dynamic>> products) {
     final selectedCategory = ref.watch(selectedCategoryProvider);
+    // Total items = categories + 1 for the "+" button
+    final int itemCount = categories.length + 1;
     return SizedBox(
       height: 64,
       child: ScrollConfiguration(
@@ -961,10 +1235,54 @@ class _HomePageState extends ConsumerState<HomePage> {
         child: ListView.builder(
           scrollDirection: Axis.horizontal,
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          itemCount: categories.length,
+          itemCount: itemCount,
           itemBuilder: (context, index) {
+            // Last item is the "+" add-category button
+            if (index == itemCount - 1) {
+              return Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                child: GestureDetector(
+                  onTap: () {
+                    Haptics.light();
+                    _showAddCategoryDialog();
+                  },
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 250),
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                        color: AppTheme.primary.withValues(alpha: 0.4),
+                        width: 1.4,
+                      ),
+                    ),
+                    alignment: Alignment.center,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.add_rounded,
+                            color: AppTheme.primary.withValues(alpha: 0.8),
+                            size: 18),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Add',
+                          style: GoogleFonts.poppins(
+                            color: AppTheme.primary.withValues(alpha: 0.8),
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            }
+
             final cat = categories[index];
             final isSelected = cat == selectedCategory;
+            final canRename = cat != "All" && cat != "Other";
             return Padding(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
               child: GestureDetector(
@@ -972,6 +1290,12 @@ class _HomePageState extends ConsumerState<HomePage> {
                   Haptics.light();
                   ref.read(selectedCategoryProvider.notifier).val = cat;
                 },
+                onLongPress: canRename
+                    ? () {
+                        Haptics.medium();
+                        _showRenameCategoryDialog(cat);
+                      }
+                    : null,
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 250),
                   curve: Curves.easeInOut,
@@ -1008,6 +1332,305 @@ class _HomePageState extends ConsumerState<HomePage> {
         ),
       ),
     );
+  }
+
+  void _showAddCategoryDialog() {
+    final controller = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: const [
+            Icon(Icons.label_outline, color: AppTheme.primary, size: 22),
+            SizedBox(width: 8),
+            Text('Add Category',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
+          ],
+        ),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          textCapitalization: TextCapitalization.words,
+          decoration: const InputDecoration(
+            border: OutlineInputBorder(),
+            labelText: 'Category name',
+            hintText: 'e.g. Bonda, Bajji...',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.primary,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10)),
+            ),
+            onPressed: () {
+              final name = controller.text.trim();
+              if (name.isEmpty) return;
+              Navigator.pop(ctx);
+              // Add to custom categories provider so it shows immediately
+              // Associate with current slot if any
+              final activeSlot = ref.read(selectedTimeSlotProvider);
+              ref.read(customCategoriesProvider.notifier).add(name, slot: activeSlot);
+              // Select the new category chip immediately
+              ref.read(selectedCategoryProvider.notifier).val = name;
+            },
+            child: const Text('Add'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showRenameCategoryDialog(String oldName) {
+    final controller = TextEditingController(text: oldName);
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            const Icon(Icons.label_outline, color: AppTheme.primary, size: 22),
+            const SizedBox(width: 8),
+            const Text('Edit Category', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
+          ],
+        ),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          textCapitalization: TextCapitalization.words,
+          decoration: const InputDecoration(
+            border: OutlineInputBorder(),
+            labelText: 'Category name',
+          ),
+        ),
+        actionsAlignment: MainAxisAlignment.spaceBetween,
+        actions: [
+          // Delete button — left side
+          TextButton.icon(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _confirmDeleteCategory(oldName);
+            },
+            icon: const Icon(Icons.delete_outline, color: Colors.red, size: 18),
+            label: const Text('Delete', style: TextStyle(color: Colors.red)),
+          ),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cancel'),
+              ),
+              const SizedBox(width: 8),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.primary,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+                onPressed: () {
+                  final newName = controller.text.trim();
+                  if (newName.isEmpty || newName == oldName) {
+                    Navigator.pop(ctx);
+                    return;
+                  }
+                  Navigator.pop(ctx);
+                  _renameCategory(oldName, newName);
+                },
+                child: const Text('Rename'),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmDeleteCategory(String categoryName) {
+    final activeSlot = ref.read(selectedTimeSlotProvider);
+    final slotName = activeSlot == TimeSlot.morning
+        ? 'Morning'
+        : activeSlot == TimeSlot.evening
+            ? 'Evening'
+            : null;
+
+    final description = slotName != null
+        ? 'Products in "$categoryName" will be removed from the $slotName slot only. They will still appear on the Home screen and other slots.'
+        : 'All products in "$categoryName" will be moved to "Other". This cannot be undone.';
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Delete Category?', style: TextStyle(fontWeight: FontWeight.bold)),
+        content: Text(description, style: const TextStyle(fontSize: 14)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            onPressed: () {
+              Navigator.pop(ctx);
+              _deleteCategory(categoryName, activeSlot: activeSlot);
+            },
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _deleteCategory(String categoryName, {TimeSlot? activeSlot}) async {
+    if (activeSlot != null) {
+      // Slot-specific delete: just hide the chip for this slot only.
+      // Products keep their category — they still show on home screen and other slots.
+      ref.read(hiddenSlotCategoriesProvider.notifier).hide(activeSlot, categoryName);
+      ref.read(customCategoriesProvider.notifier).remove(categoryName);
+      if (ref.read(selectedCategoryProvider) == categoryName) {
+        ref.read(selectedCategoryProvider.notifier).val = 'All';
+      }
+      if (mounted) {
+        showCelebration(
+          context,
+          '"$categoryName" removed from this slot',
+          icon: Icons.delete_rounded,
+          bannerColor: Colors.red.shade700,
+        );
+      }
+      return;
+    }
+
+    // No slot active — global delete: move all products to "Other"
+    final allProducts = ref.read(productsProvider);
+    final idsToMove = allProducts
+        .where((p) => (p['category'] ?? '') == categoryName)
+        .map((p) => p['id'].toString())
+        .toList();
+
+    if (idsToMove.isEmpty) {
+      // Nothing to move — just remove custom category chip if present
+      ref.read(customCategoriesProvider.notifier).remove(categoryName);
+      if (ref.read(selectedCategoryProvider) == categoryName) {
+        ref.read(selectedCategoryProvider.notifier).val = 'All';
+      }
+      return;
+    }
+
+    // Optimistically update local state
+    ref.read(productsProvider.notifier).updateState((state) {
+      return state.map((p) {
+        if (idsToMove.contains(p['id'].toString())) {
+          return {
+            ...p,
+            'category': 'Other',
+            'category_i18n': {'en': 'Other'},
+          };
+        }
+        return p;
+      }).toList();
+    });
+
+    if (ref.read(selectedCategoryProvider) == categoryName) {
+      ref.read(selectedCategoryProvider.notifier).val = 'All';
+    }
+    ref.read(customCategoriesProvider.notifier).remove(categoryName);
+
+    // Persist to Supabase — update only the affected product IDs
+    try {
+      for (final id in idsToMove) {
+        await Supabase.instance.client
+            .from('products')
+            .update({'category': 'Other', 'category_i18n': {'en': 'Other'}})
+            .eq('id', id);
+      }
+
+      if (mounted) {
+        showCelebration(
+          context,
+          '"$categoryName" category deleted',
+          icon: Icons.delete_rounded,
+          bannerColor: Colors.red.shade700,
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        _fetchProducts(); // refetch to restore correct state on failure
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to delete: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  Future<void> _renameCategory(String oldName, String newName) async {
+    // Update local state optimistically first
+    ref.read(productsProvider.notifier).updateState((state) {
+      return state.map((p) {
+        if ((p['category'] ?? '') == oldName) {
+          return {
+            ...p,
+            'category': newName,
+            'category_i18n': {'en': newName},
+          };
+        }
+        return p;
+      }).toList();
+    });
+
+    // If the renamed category was selected, update the chip selection
+    if (ref.read(selectedCategoryProvider) == oldName) {
+      ref.read(selectedCategoryProvider.notifier).val = newName;
+    }
+
+    // Update custom categories list if it was there
+    ref.read(customCategoriesProvider.notifier).rename(oldName, newName);
+
+    // Persist to Supabase — update all products with the old category name
+    try {
+      await Supabase.instance.client
+          .from('products')
+          .update({
+            'category': newName,
+            'category_i18n': {'en': newName},
+          })
+          .eq('category', oldName);
+    } catch (e) {
+      // Roll back on failure
+      if (mounted) {
+        ref.read(productsProvider.notifier).updateState((state) {
+          return state.map((p) {
+            if ((p['category'] ?? '') == newName &&
+                (p['category_i18n']?['en'] ?? '') == newName) {
+              return {
+                ...p,
+                'category': oldName,
+                'category_i18n': {'en': oldName},
+              };
+            }
+            return p;
+          }).toList();
+        });
+        if (ref.read(selectedCategoryProvider) == newName) {
+          ref.read(selectedCategoryProvider.notifier).val = oldName;
+        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to rename: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
   }
 
   Widget _buildProductGridInScroll(List<Map<String, dynamic>> filteredProducts, List<String> categories) {
@@ -1084,20 +1707,9 @@ class _HomePageState extends ConsumerState<HomePage> {
                     _buildWhatsAppNavItem(Icons.home, context.t('home'), true, () {}),
                     _buildWhatsAppNavItem(Icons.inventory_2_outlined, context.t('inventory'), false, () {
                       Haptics.light();
-                      showModalBottomSheet(
-                        context: context,
-                        isScrollControlled: true,
-                        useSafeArea: true,
-                        constraints: BoxConstraints(
-                          maxWidth: MediaQuery.of(context).size.width > 900 
-                              ? 800 
-                              : MediaQuery.of(context).size.width > 600 
-                                  ? MediaQuery.of(context).size.width * 0.85
-                                  : double.infinity,
-                        ),
-                        backgroundColor: Colors.white,
-                        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-                        builder: (context) => const InventorySheet(),
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const InventorySheet()),
                       );
                     }),
                     _buildWhatsAppNavItem(Icons.receipt_long_outlined, context.t('expense'), false, () {
@@ -1167,16 +1779,34 @@ class _HomePageState extends ConsumerState<HomePage> {
   }
 
   Future<void> _openAdminAddProductSheet() async {
+    final allProducts = ref.read(productsProvider);
+    final existingCats = allProducts
+        .map((p) => p['category'] as String?)
+        .where((c) => c != null && c.isNotEmpty)
+        .cast<String>()
+        .toSet()
+        .toList()
+      ..sort();
+    // Always include common defaults and "Other" at the end
+    final defaultCats = ["Puff", "Samosa", "Roll", "Drinks", "Sandwich"];
+    final merged = {...defaultCats, ...existingCats}.where((c) => c != 'Other').toList()..sort();
+    merged.add("Other"); // always last
+
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.white,
       builder: (context) => AddProductSheet(
-        categories: ["Puff", "Samosa", "Roll", "Drinks", "Sandwich", "Other"],
+        categories: merged,
         onAdd: (name, price, category, imagePath, nameI18n, categoryI18n) =>
             _saveProductOptimistically(name, price, category, imagePath, nameI18n, categoryI18n),
       ),
     );
+    if (mounted) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        FocusManager.instance.primaryFocus?.unfocus();
+      });
+    }
   }
 
   Future<void> _saveProductOptimistically(
@@ -1200,6 +1830,10 @@ class _HomePageState extends ConsumerState<HomePage> {
       'is_syncing': true,
     };
     ref.read(productsProvider.notifier).updateState((state) => [tempProduct, ...state]);
+    // Auto-select the new product's category in the chip bar
+    ref.read(selectedCategoryProvider.notifier).val = category;
+    // If this was a custom (empty) category, it's now backed by a product — remove from custom list
+    ref.read(customCategoriesProvider.notifier).remove(category);
     try {
       await _saveProductToSupabase(name, price, category, localPath, tempId, nameI18n, categoryI18n);
     } catch (e) {
@@ -1255,6 +1889,12 @@ class _HomePageState extends ConsumerState<HomePage> {
         onDelete: () => _deleteProduct(product['id'], slot),
       ),
     );
+    // Force-release focus after sheet closes so keyboard doesn't reappear
+    if (mounted) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        FocusManager.instance.primaryFocus?.unfocus();
+      });
+    }
   }
 
   Future<void> _updateProduct(String id, Map<String, dynamic> updates, String? localImagePath) async {
@@ -1305,12 +1945,12 @@ class _HomePageState extends ConsumerState<HomePage> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context, "slot"),
-              child: Text("Delete in $slotName"),
+              child: Text("Delete in $slotName Only"),
             ),
             TextButton(
               onPressed: () => Navigator.pop(context, "everywhere"),
-              style: TextButton.styleFrom(foregroundColor: AppTheme.primary),
-              child: const Text("Delete Snack"),
+              style: TextButton.styleFrom(foregroundColor: Colors.red),
+              child: const Text("Delete Everywhere"),
             ),
             TextButton(
               onPressed: () => Navigator.pop(context, "cancel"),
@@ -1321,11 +1961,16 @@ class _HomePageState extends ConsumerState<HomePage> {
       );
 
       if (result == "slot") {
-        final updates = {
-          'category': 'Other',
-          'category_i18n': {'en': 'Other'},
-        };
-        await _updateProduct(id, updates, null);
+        // Slot-specific delete: Hide this product ID for the active slot only
+        ref.read(hiddenSlotProductsProvider.notifier).hide(activeSlot, id);
+        if (mounted) {
+          showCelebration(
+            context,
+            'Product hidden from $slotName slot',
+            icon: Icons.visibility_off_rounded,
+            bannerColor: AppTheme.primary,
+          );
+        }
         return;
       } else if (result == "everywhere") {
         // Continue to delete everywhere
@@ -1382,19 +2027,24 @@ class TimeSlotProductsPage extends ConsumerWidget {
     final name = (product['name'] ?? '').toString().toLowerCase();
     final matchesCategory = config.filterKeywords.any((keyword) => category.contains(keyword));
     final matchesName = config.filterProductNames.any((keyword) => name.contains(keyword));
-    return matchesCategory || matchesName;
+    final isGlobal = isGlobalProduct(product);
+    return matchesCategory || matchesName || isGlobal;
   }
 
   List<String> _buildCategories(List<Map<String, dynamic>> products) {
     final List<String> categories = ["All"];
     final existingCats = products
         .map((p) => p['category'] as String?)
-        .where((c) => c != null && c.isNotEmpty)
+        .where((c) => c != null && c.isNotEmpty && c != 'Other')
         .cast<String>()
         .toSet()
         .toList()
       ..sort();
     categories.addAll(existingCats);
+    // "Other" always last
+    if (products.any((p) => (p['category'] ?? '') == 'Other')) {
+      categories.add("Other");
+    }
     return categories;
   }
 
@@ -1446,6 +2096,12 @@ class TimeSlotProductsPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final products = ref.watch(productsProvider);
     final filteredProducts = products.where((p) {
+      final productId = p['id'].toString();
+      // Filter out products hidden for this specific slot
+      final hiddenForSlot = ref.watch(hiddenSlotProductsProvider)[config.slot] ?? {};
+      if (hiddenForSlot.contains(productId)) {
+        return false;
+      }
       return _matchesSlot(p);
     }).toList();
     final categories = _buildCategories(products);
@@ -1960,10 +2616,8 @@ class AddProductSheet extends StatefulWidget {
 
 class _AddProductSheetState extends State<AddProductSheet> {
   final _nameController = TextEditingController();
-  final _nameTaController = TextEditingController();
   final _priceController = TextEditingController();
   final _otherCategoryController = TextEditingController();
-  final _categoryTaController = TextEditingController();
   late String _category;
   XFile? _selectedImage;
   final ImagePicker _picker = ImagePicker();
@@ -1973,10 +2627,8 @@ class _AddProductSheetState extends State<AddProductSheet> {
   @override
   void dispose() { 
     _nameController.dispose(); 
-    _nameTaController.dispose();
     _priceController.dispose(); 
     _otherCategoryController.dispose();
-    _categoryTaController.dispose();
     super.dispose(); 
   }
 
@@ -2002,11 +2654,6 @@ class _AddProductSheetState extends State<AddProductSheet> {
               onChanged: (_) => setState(() {}),
             ),
             const SizedBox(height: 12),
-            TextField(
-              controller: _nameTaController,
-              decoration: InputDecoration(labelText: context.t('productNameTamil'), border: const OutlineInputBorder()),
-            ),
-            const SizedBox(height: 12),
             TextField(controller: _priceController, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: InputDecoration(labelText: context.t('price'), border: const OutlineInputBorder())),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
@@ -2023,16 +2670,6 @@ class _AddProductSheetState extends State<AddProductSheet> {
               ),
             ],
             const SizedBox(height: 12),
-            TextField(
-              controller: _categoryTaController,
-              decoration: InputDecoration(labelText: context.t('categoryTamil'), border: const OutlineInputBorder()),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              context.t('tamilOptional'),
-              style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
-            ),
-            const SizedBox(height: 12),
             SizedBox(width: double.infinity, child: OutlinedButton.icon(onPressed: _pickImage, icon: const Icon(Icons.photo_library_outlined), label: Text(_selectedImage == null ? context.t('choosePhoto') : context.t('photoSelected')))),
             if (_selectedImage != null) ...[const SizedBox(height: 12), ClipRRect(borderRadius: BorderRadius.circular(12), child: Image.file(File(_selectedImage!.path), height: 120, width: double.infinity, fit: BoxFit.cover))],
             const SizedBox(height: 16),
@@ -2047,8 +2684,8 @@ class _AddProductSheetState extends State<AddProductSheet> {
                 ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.t('validAddProduct')))); 
                 return; 
               }
-              final nameI18n = _buildI18nMap(en: name, ta: _nameTaController.text.trim());
-              final categoryI18n = _buildI18nMap(en: finalCategory, ta: _categoryTaController.text.trim());
+              final nameI18n = {'en': name};
+              final categoryI18n = {'en': finalCategory};
               widget.onAdd(name, price, finalCategory, _selectedImage!.path, nameI18n, categoryI18n);
               Navigator.pop(context);
             }, child: Text(context.t('addProductButton')))),
@@ -2058,12 +2695,6 @@ class _AddProductSheetState extends State<AddProductSheet> {
     );
   }
 
-  Map<String, String> _buildI18nMap({required String en, required String ta}) {
-    return {
-      'en': en,
-      if (ta.isNotEmpty) 'ta': ta,
-    };
-  }
 }
 
 class SelectExistingProductSheet extends StatelessWidget {
@@ -2437,3 +3068,4 @@ class CheckoutFloatingBar extends ConsumerWidget {
   }
 }
 
+                

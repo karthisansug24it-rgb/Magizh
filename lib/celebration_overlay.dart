@@ -2,17 +2,19 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 
-/// A single confetti particle with full physics
+// ---------------------------------------------------------------------------
+// Particle data class
+// ---------------------------------------------------------------------------
 class _Particle {
   double x, y;
-  double vx, vy; // velocity
+  double vx, vy;
   double gravity;
   double size;
   Color color;
   double rotation;
   double rotationSpeed;
   double opacity;
-  double drag; // air resistance
+  double drag; // 0..1 — per-frame velocity multiplier base
   int shape; // 0=circle, 1=rect, 2=strip, 3=diamond
 
   _Particle({
@@ -31,16 +33,19 @@ class _Particle {
   });
 }
 
-/// Custom painter — draws all particles every frame
+// ---------------------------------------------------------------------------
+// Painter — redraws every ticker frame
+// ---------------------------------------------------------------------------
 class _ConfettiPainter extends CustomPainter {
   final List<_Particle> particles;
   _ConfettiPainter(this.particles);
 
   @override
   void paint(Canvas canvas, Size size) {
+    final paint = Paint();
     for (final p in particles) {
       if (p.opacity <= 0) continue;
-      final paint = Paint()..color = p.color.withValues(alpha: p.opacity);
+      paint.color = p.color.withValues(alpha: p.opacity);
       canvas.save();
       canvas.translate(p.x, p.y);
       canvas.rotate(p.rotation);
@@ -51,14 +56,18 @@ class _ConfettiPainter extends CustomPainter {
           break;
         case 1: // rectangle
           canvas.drawRect(
-            Rect.fromCenter(center: Offset.zero, width: p.size, height: p.size * 0.55),
+            Rect.fromCenter(
+                center: Offset.zero, width: p.size, height: p.size * 0.55),
             paint,
           );
           break;
-        case 2: // long strip / ribbon
+        case 2: // ribbon
           canvas.drawRRect(
             RRect.fromRectAndRadius(
-              Rect.fromCenter(center: Offset.zero, width: p.size * 1.4, height: p.size * 0.35),
+              Rect.fromCenter(
+                  center: Offset.zero,
+                  width: p.size * 1.4,
+                  height: p.size * 0.35),
               Radius.circular(p.size * 0.15),
             ),
             paint,
@@ -79,10 +88,12 @@ class _ConfettiPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
+  bool shouldRepaint(covariant _ConfettiPainter old) => true;
 }
 
-/// Full-screen celebration overlay with smooth 60fps confetti
+// ---------------------------------------------------------------------------
+// CelebrationOverlay widget
+// ---------------------------------------------------------------------------
 class CelebrationOverlay extends StatefulWidget {
   final String message;
   final VoidCallback onDismiss;
@@ -103,16 +114,25 @@ class CelebrationOverlay extends StatefulWidget {
 
 class _CelebrationOverlayState extends State<CelebrationOverlay>
     with TickerProviderStateMixin {
+  // Two tickers are needed — one for AnimationController, one for particles.
+  // TickerProviderStateMixin (not Single) supports both.
   late final Ticker _ticker;
   late final AnimationController _bannerAnim;
+
   final List<_Particle> _particles = [];
   final Random _rng = Random();
 
-  double _elapsed = 0; // total seconds elapsed
+  // Proper delta-time tracking
+  Duration _lastTickDuration = Duration.zero;
+  double _elapsed = 0.0; // accumulated seconds
+
   bool _bannerDismissing = false;
   Size _screenSize = Size.zero;
 
-  // Vibrant celebration palette
+  // Adaptive quality: reduce particles on lower-end devices (small screens).
+  // Determined once in initState after first build.
+  int _spawnMultiplier = 1; // 1 = full, lower fraction via rate caps
+
   static const _colors = [
     Color(0xFFFF6B6B), Color(0xFFFFD93D), Color(0xFF6BCB77),
     Color(0xFF4D96FF), Color(0xFFFF8E71), Color(0xFFC084FC),
@@ -121,21 +141,31 @@ class _CelebrationOverlayState extends State<CelebrationOverlay>
     Color(0xFF60A5FA), Color(0xFFFBBF24), Color(0xFFA3E635),
   ];
 
+  // Max live particles — capped to keep GPU load reasonable on all devices
+  static const int _maxParticles = 180;
+
   @override
   void initState() {
     super.initState();
 
-    // Banner slide animation
     _bannerAnim = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 500),
+      duration: const Duration(milliseconds: 450),
     )..forward();
 
-    // High-performance ticker for 60fps particle updates
     _ticker = createTicker(_onTick)..start();
 
-    // Auto-dismiss after 2.8s
-    Future.delayed(const Duration(milliseconds: 2800), _startDismiss);
+    // Auto-dismiss after 3 s
+    Future.delayed(const Duration(milliseconds: 3000), _startDismiss);
+
+    // Detect screen size after first frame to set adaptive quality
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final size = MediaQuery.of(context).size;
+      _screenSize = size;
+      // Smallest Android phones (< 360dp wide) get reduced spawn rate
+      _spawnMultiplier = size.width < 360 ? 0 : 1;
+    });
   }
 
   void _startDismiss() {
@@ -146,95 +176,100 @@ class _CelebrationOverlayState extends State<CelebrationOverlay>
     });
   }
 
-  /// Spawn particles — called every frame during the burst phase
   void _spawnParticles(double screenW, double screenH) {
-    // Burst phase: first 0.8 seconds spawn heavily, then taper off
-    final spawnRate = _elapsed < 0.15
-        ? 25 // initial explosion
-        : _elapsed < 0.5
-            ? 12
-            : _elapsed < 1.0
-                ? 6
-                : _elapsed < 1.5
+    if (_particles.length >= _maxParticles) return;
+
+    // Burst schedule (seconds elapsed → particles per frame)
+    final int baseRate = _elapsed < 0.12
+        ? 20
+        : _elapsed < 0.45
+            ? 10
+            : _elapsed < 0.9
+                ? 5
+                : _elapsed < 1.4
                     ? 2
                     : 0;
 
-    for (int i = 0; i < spawnRate; i++) {
-      // Spawn from top edge, random X positions across entire width
-      final spawnX = _rng.nextDouble() * screenW;
-      final spawnY = -_rng.nextDouble() * 40;
+    // On very small screens reduce by half
+    final int rate =
+        _spawnMultiplier == 0 ? (baseRate ~/ 2).clamp(0, 12) : baseRate;
 
-      // Some particles also burst from the sides
-      final fromSide = _rng.nextDouble() < 0.2;
-      final sx = fromSide
-          ? (_rng.nextBool() ? -10.0 : screenW + 10.0)
-          : spawnX;
-      final sy = fromSide
-          ? _rng.nextDouble() * screenH * 0.4
-          : spawnY;
+    final int canSpawn = (_maxParticles - _particles.length).clamp(0, rate);
+
+    for (int i = 0; i < canSpawn; i++) {
+      final fromSide = _rng.nextDouble() < 0.18;
+      final double sx = fromSide
+          ? (_rng.nextBool() ? -8.0 : screenW + 8.0)
+          : _rng.nextDouble() * screenW;
+      final double sy = fromSide
+          ? _rng.nextDouble() * screenH * 0.35
+          : -_rng.nextDouble() * 35;
 
       _particles.add(_Particle(
         x: sx,
         y: sy,
-        vx: (_rng.nextDouble() - 0.5) * 200, // horizontal spread
-        vy: _rng.nextDouble() * 250 + 80, // downward velocity
-        gravity: _rng.nextDouble() * 120 + 80,
-        size: _rng.nextDouble() * 8 + 4,
+        vx: (_rng.nextDouble() - 0.5) * 180,
+        vy: _rng.nextDouble() * 230 + 70,
+        gravity: _rng.nextDouble() * 110 + 75,
+        size: _rng.nextDouble() * 7 + 4,
         color: _colors[_rng.nextInt(_colors.length)],
         rotation: _rng.nextDouble() * pi * 2,
-        rotationSpeed: (_rng.nextDouble() - 0.5) * 6,
+        rotationSpeed: (_rng.nextDouble() - 0.5) * 5.5,
         opacity: 1.0,
-        drag: _rng.nextDouble() * 0.3 + 0.85, // 0.85 - 1.15 drag
+        // drag strictly < 1 so velocity decelerates correctly
+        drag: _rng.nextDouble() * 0.14 + 0.76,
         shape: _rng.nextInt(4),
       ));
     }
   }
 
   void _onTick(Duration duration) {
-    final dt = duration.inMicroseconds / 1000000.0;
-    final prevElapsed = _elapsed;
-    _elapsed = dt;
+    // Correct frame delta — difference from last tick, not total elapsed
+    final double frameDt =
+        ((duration - _lastTickDuration).inMicroseconds / 1_000_000.0)
+            .clamp(0.0, 0.05); // cap at 50 ms to survive GC pauses
+    _lastTickDuration = duration;
+    _elapsed += frameDt;
 
-    if (_screenSize == Size.zero) return;
+    if (_screenSize == Size.zero || frameDt == 0) return;
 
-    final frameDt = (_elapsed - prevElapsed).clamp(0.0, 0.05); // cap at 50ms
-
-    // Spawn new particles
     _spawnParticles(_screenSize.width, _screenSize.height);
 
-    // Update existing particles
+    final double w = _screenSize.width;
+    final double h = _screenSize.height;
+
     for (final p in _particles) {
-      // Apply gravity
+      // Gravity
       p.vy += p.gravity * frameDt;
 
-      // Apply drag (air resistance for horizontal sway)
-      p.vx *= (1.0 - (1.0 - p.drag) * frameDt * 3);
+      // Exponential drag — physically correct, drag < 1 guaranteed
+      final double dragFactor = pow(p.drag, frameDt * 60).toDouble();
+      p.vx *= dragFactor;
 
-      // Sinusoidal wobble
-      p.vx += sin(_elapsed * 3 + p.rotation) * 15 * frameDt;
+      // Gentle sinusoidal wobble
+      p.vx += sin(_elapsed * 2.8 + p.rotation) * 12 * frameDt;
 
-      // Move
       p.x += p.vx * frameDt;
       p.y += p.vy * frameDt;
-
-      // Rotate
       p.rotation += p.rotationSpeed * frameDt;
 
-      // Fade out particles near bottom of screen
-      if (p.y > _screenSize.height * 0.75) {
-        final fadeZone = _screenSize.height * 0.25;
-        final distFromFadeStart = p.y - _screenSize.height * 0.75;
-        p.opacity = (1.0 - distFromFadeStart / fadeZone).clamp(0.0, 1.0);
+      // Wrap horizontally so particles re-enter from the other side
+      // (looks nicer on wide tablets)
+      if (p.x < -20) p.x = w + 10;
+      if (p.x > w + 20) p.x = -10;
+
+      // Fade near bottom
+      if (p.y > h * 0.72) {
+        final double dist = p.y - h * 0.72;
+        p.opacity = (1.0 - dist / (h * 0.28)).clamp(0.0, 1.0);
       }
 
-      // Also fade late particles
-      if (_elapsed > 2.0) {
-        p.opacity *= 0.97;
-      }
+      // General late fade
+      if (_elapsed > 2.2) p.opacity *= 0.96;
     }
 
-    // Remove dead particles
-    _particles.removeWhere((p) => p.opacity <= 0.01 || p.y > _screenSize.height + 50);
+    // Remove dead or off-screen particles
+    _particles.removeWhere((p) => p.opacity <= 0.01 || p.y > h + 40);
 
     if (mounted) setState(() {});
   }
@@ -248,35 +283,39 @@ class _CelebrationOverlayState extends State<CelebrationOverlay>
 
   @override
   Widget build(BuildContext context) {
-    _screenSize = MediaQuery.of(context).size;
+    // Keep screen size in sync (handles rotation / fold events)
+    final size = MediaQuery.of(context).size;
+    if (_screenSize != size) _screenSize = size;
+
     final topPadding = MediaQuery.of(context).padding.top;
 
-    // Banner animation values
-    final bannerProgress = CurvedAnimation(
+    final double bannerProgress = CurvedAnimation(
       parent: _bannerAnim,
       curve: Curves.easeOutBack,
     ).value;
-    final bannerY = -80.0 + (80.0 + topPadding + 12) * bannerProgress;
-    final bannerOpacity = _bannerAnim.value.clamp(0.0, 1.0);
+    final double bannerY =
+        -90.0 + (90.0 + topPadding + 14) * bannerProgress;
+    final double bannerOpacity = _bannerAnim.value.clamp(0.0, 1.0);
 
-    return Material(
-      color: Colors.transparent,
-      child: SizedBox.expand(
-        child: Stack(
+    return IgnorePointer(
+      child: Material(
+        color: Colors.transparent,
+        child: SizedBox.expand(
+          child: Stack(
           children: [
-            // Full-screen confetti canvas
+            // Confetti layer — isolated in its own repaint boundary
             Positioned.fill(
               child: IgnorePointer(
                 child: RepaintBoundary(
                   child: CustomPaint(
-                    painter: _ConfettiPainter(_particles),
+                    painter: _ConfettiPainter(List.unmodifiable(_particles)),
                     size: _screenSize,
                   ),
                 ),
               ),
             ),
 
-            // Success banner at top
+            // Banner
             Positioned(
               top: bannerY,
               left: 16,
@@ -284,77 +323,82 @@ class _CelebrationOverlayState extends State<CelebrationOverlay>
               child: Opacity(
                 opacity: bannerOpacity,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
                       colors: [
                         widget.bannerColor,
-                        widget.bannerColor.withValues(alpha: 0.88),
+                        widget.bannerColor.withValues(alpha: 0.85),
                       ],
                     ),
                     borderRadius: BorderRadius.circular(16),
                     boxShadow: [
                       BoxShadow(
-                        color: widget.bannerColor.withValues(alpha: 0.35),
-                        blurRadius: 24,
-                        spreadRadius: 2,
-                        offset: const Offset(0, 8),
+                        color: widget.bannerColor.withValues(alpha: 0.32),
+                        blurRadius: 20,
+                        spreadRadius: 1,
+                        offset: const Offset(0, 7),
                       ),
                       BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.08),
-                        blurRadius: 8,
+                        color: Colors.black.withValues(alpha: 0.07),
+                        blurRadius: 6,
                         offset: const Offset(0, 2),
                       ),
                     ],
                   ),
                   child: Row(
                     children: [
-                      // Icon with glow circle
                       Container(
                         padding: const EdgeInsets.all(7),
                         decoration: BoxDecoration(
                           color: Colors.white.withValues(alpha: 0.22),
                           shape: BoxShape.circle,
                         ),
-                        child: Icon(widget.icon, color: Colors.white, size: 22),
+                        child:
+                            Icon(widget.icon, color: Colors.white, size: 20),
                       ),
-                      const SizedBox(width: 12),
+                      const SizedBox(width: 11),
                       Expanded(
                         child: Text(
                           widget.message,
                           style: const TextStyle(
                             color: Colors.white,
-                            fontSize: 15,
+                            fontSize: 14,
                             fontWeight: FontWeight.w600,
-                            letterSpacing: 0.15,
-                            height: 1.3,
+                            letterSpacing: 0.1,
+                            height: 1.35,
                           ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                      const Text('🎉', style: TextStyle(fontSize: 22)),
+                      const SizedBox(width: 6),
+                      const Text('🎉', style: TextStyle(fontSize: 20)),
                     ],
                   ),
                 ),
               ),
             ),
           ],
+          ),
         ),
       ),
     );
   }
 }
 
-/// Call this from anywhere to show the celebration effect
+// ---------------------------------------------------------------------------
+// Public helper — call from anywhere
+// ---------------------------------------------------------------------------
 void showCelebration(
   BuildContext context,
   String message, {
   IconData icon = Icons.check_circle_rounded,
   Color bannerColor = const Color(0xFF2E7D32),
 }) {
-  // Use the root navigator's overlay so this works regardless of which
-  // page/sheet triggered it (avoids "No Overlay widget found" error).
   OverlayState? overlay;
   try {
     overlay = Navigator.of(context, rootNavigator: true).overlay;
@@ -365,7 +409,7 @@ void showCelebration(
 
   late OverlayEntry entry;
   entry = OverlayEntry(
-    builder: (ctx) => CelebrationOverlay(
+    builder: (_) => CelebrationOverlay(
       message: message,
       icon: icon,
       bannerColor: bannerColor,
@@ -374,5 +418,5 @@ void showCelebration(
       },
     ),
   );
-  overlay!.insert(entry);
+  overlay.insert(entry);
 }
