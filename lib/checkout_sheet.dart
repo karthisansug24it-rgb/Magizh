@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'celebration_overlay.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 // import 'package:intl/intl.dart';
@@ -122,16 +123,7 @@ class _CheckoutSheetState extends ConsumerState<CheckoutSheet> {
 
       if (mounted) {
         Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(context.t('orderSuccess')),
-            backgroundColor: AppTheme.success,
-            behavior: SnackBarBehavior.floating,
-            duration: const Duration(seconds: 1),
-            margin: const EdgeInsets.only(bottom: 120, left: 24, right: 24),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          )
-        );
+        showCelebration(context, context.t('orderSuccess'), icon: Icons.shopping_bag_rounded, bannerColor: const Color(0xFF2E7D32));
       }
 
     } catch (e) {

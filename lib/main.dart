@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'celebration_overlay.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
@@ -128,6 +129,13 @@ class CategoryNotifier extends Notifier<String> {
 }
 final selectedCategoryProvider = NotifierProvider<CategoryNotifier, String>(CategoryNotifier.new);
 
+class TimeSlotNotifier extends Notifier<TimeSlot?> {
+  @override
+  TimeSlot? build() => null;
+  set val(TimeSlot? v) => state = v;
+}
+final selectedTimeSlotProvider = NotifierProvider<TimeSlotNotifier, TimeSlot?>(TimeSlotNotifier.new);
+
 class SearchNotifier extends Notifier<String> {
   @override
   String build() => "";
@@ -213,16 +221,23 @@ class HomePage extends ConsumerStatefulWidget {
 
 class _HomePageState extends ConsumerState<HomePage> {
   final TextEditingController _searchController = TextEditingController();
+  final FocusNode _searchFocusNode = FocusNode();
 
   @override
   void initState() {
     super.initState();
-    Future.microtask(() => _fetchProducts());
+    _searchFocusNode.addListener(() {
+      if (mounted) setState(() {});
+    });
+    Future.microtask(() {
+      _fetchProducts();
+    });
   }
 
   @override
   void dispose() {
     _searchController.dispose();
+    _searchFocusNode.dispose();
     super.dispose();
   }
 
@@ -262,7 +277,7 @@ class _HomePageState extends ConsumerState<HomePage> {
         builder: (context) => TimeSlotProductsPage(
           config: config,
           onAddTap: (ctx) => _openTimeSlotAddProductSheet(ctx, slot),
-          onEdit: (ctx, product, categories) => _openEditProductSheet(ctx, product, categories),
+          onEdit: (ctx, product, categories) => _openEditProductSheet(ctx, product, categories, activeSlot: slot),
         ),
       ),
     );
@@ -340,77 +355,100 @@ class _HomePageState extends ConsumerState<HomePage> {
       categories.add("Other");
     }
 
+    final selectedTimeSlot = ref.watch(selectedTimeSlotProvider);
     final filteredProducts = products.where((p) {
-      final matchesCategory = selectedCategory == "All" || 
+      final matchesCategory = selectedCategory == "All" ||
           p["category"].toString().toLowerCase() == selectedCategory.toLowerCase();
-      return matchesCategory && context.productName(p).toLowerCase().contains(searchQuery);
+      final matchesSearch = context.productName(p).toLowerCase().contains(searchQuery);
+
+      // If a time slot is selected, ensure the product matches its filters
+      if (selectedTimeSlot != null) {
+        final cfg = _timeSlotConfig(selectedTimeSlot);
+        final category = (p['category'] ?? '').toString().toLowerCase();
+        final name = context.productName(p).toLowerCase();
+        final matchesCategoryKeywords = cfg.filterKeywords.any((k) => category.contains(k));
+        final matchesNameKeywords = cfg.filterProductNames.any((k) => name.contains(k));
+        final isAlwaysAvailable = isAlwaysAvailableProduct(p) && category != 'other';
+        final matchesTimeSlot = matchesCategoryKeywords || matchesNameKeywords || isAlwaysAvailable;
+        return matchesCategory && matchesSearch && matchesTimeSlot;
+      }
+
+      return matchesCategory && matchesSearch;
     }).toList();
 
-    return Scaffold(
-      body: SafeArea(
-        child: Stack(
-          children: [
-            Column(
-              children: [
-                _buildHeader(),
-                _buildSearchBar(),
-                Expanded(
-                  child: isLoading
-                      ? const Center(child: CircularProgressIndicator(color: AppTheme.primary))
-                      : ref.watch(errorProvider) != null
-                          ? _buildErrorView()
-                          : RefreshIndicator(
-                              onRefresh: _fetchProducts,
-                              color: AppTheme.primary,
-                              child: CustomScrollView(
-                                slivers: [
-                                  SliverToBoxAdapter(child: _buildPromoBanner()),
-                                  SliverToBoxAdapter(child: _buildCategories(categories, products)),
-                                  if (filteredProducts.isEmpty)
-                                    SliverFillRemaining(
-                                      hasScrollBody: false,
-                                      child: _buildEmptyState(),
-                                    )
-                                  else
-                                    SliverToBoxAdapter(
-                                      child: _buildProductGridInScroll(filteredProducts, categories),
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () {
+        FocusScope.of(context).unfocus();
+      },
+      child: Scaffold(
+        body: SafeArea(
+          child: Stack(
+            children: [
+              Column(
+                children: [
+                  _buildHeader(),
+                  _buildSearchBar(),
+                  Expanded(
+                    child: isLoading
+                        ? const Center(child: CircularProgressIndicator(color: AppTheme.primary))
+                        : ref.watch(errorProvider) != null
+                            ? _buildErrorView()
+                            : _searchFocusNode.hasFocus
+                                ? _buildRecommendationsList(products)
+                                : RefreshIndicator(
+                                    onRefresh: _fetchProducts,
+                                    color: AppTheme.primary,
+                                    child: CustomScrollView(
+                                      slivers: [
+                                        SliverToBoxAdapter(child: _buildPromoBanner()),
+                                        SliverToBoxAdapter(child: _buildCategories(categories, products)),
+                                        if (filteredProducts.isEmpty)
+                                          SliverFillRemaining(
+                                            hasScrollBody: false,
+                                            child: _buildEmptyState(),
+                                          )
+                                        else
+                                          SliverToBoxAdapter(
+                                            child: _buildProductGridInScroll(filteredProducts, categories),
+                                          ),
+                                      ],
                                     ),
-                                ],
-                              ),
-                            ),
-                ),
-              ],
-            ),
-            _buildBottomNav(context),
-            if (selectedCount > 0)
-              Positioned(
-                bottom: 210,
-                right: 20,
-                child: GestureDetector(
-                  onTap: () {
-                    Haptics.medium();
-                    ref.read(tapCountsProvider.notifier).set({});
-                  },
-                  child: Container(
-                    width: 52,
-                    height: 52,
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: AppTheme.primary.withValues(alpha: 0.2), width: 1),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.15),
-                          blurRadius: 12,
-                          offset: const Offset(0, 6),
-                        ),
-                      ],
+                                  ),
+                  ),
+                ],
+              ),
+              _buildBottomNav(context),
+              if (selectedCount > 0)
+                Positioned(
+                  bottom: 210,
+                  right: 20,
+                  child: GestureDetector(
+                    onTap: () {
+                      Haptics.medium();
+                      ref.read(tapCountsProvider.notifier).set({});
+                    },
+                    child: Container(
+                      width: 52,
+                      height: 52,
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: AppTheme.primary.withValues(alpha: 0.2), width: 1),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.15),
+                            blurRadius: 12,
+                            offset: const Offset(0, 6),
+                          ),
+                        ],
+                      ),
+                      child: const Icon(Icons.close, color: AppTheme.primary, size: 28),
                     ),
-                    child: const Icon(Icons.close, color: AppTheme.primary, size: 28),
                   ),
                 ),
-              ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -536,6 +574,7 @@ class _HomePageState extends ConsumerState<HomePage> {
         ),
         child: TextField(
           controller: _searchController,
+          focusNode: _searchFocusNode,
           onChanged: (value) => ref.read(searchProvider.notifier).val = value,
           style: GoogleFonts.roboto(
             fontSize: 15,
@@ -565,99 +604,346 @@ class _HomePageState extends ConsumerState<HomePage> {
     );
   }
 
+  Widget _buildRecommendationsList(List<Map<String, dynamic>> allProducts) {
+    final query = _searchController.text.toLowerCase();
+    final selectedTimeSlot = ref.watch(selectedTimeSlotProvider);
+
+    final recommended = allProducts.where((p) {
+      final name = context.productName(p).toLowerCase();
+      final category = (p['category'] ?? '').toString().toLowerCase();
+      final matchesQuery = name.contains(query) || category.contains(query);
+
+      if (selectedTimeSlot != null) {
+        final cfg = _timeSlotConfig(selectedTimeSlot);
+        final matchesCategoryKeywords = cfg.filterKeywords.any((k) => category.contains(k));
+        final matchesNameKeywords = cfg.filterProductNames.any((k) => name.contains(k));
+        final isAlwaysAvailable = isAlwaysAvailableProduct(p) && category != 'other';
+        final matchesTimeSlot = matchesCategoryKeywords || matchesNameKeywords || isAlwaysAvailable;
+        return matchesQuery && matchesTimeSlot;
+      }
+
+      return matchesQuery;
+    }).toList();
+
+    if (recommended.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.search_off_rounded, size: 48, color: AppTheme.textSecondary),
+              const SizedBox(height: 12),
+              Text(
+                context.t('noProducts'),
+                style: GoogleFonts.poppins(fontSize: 16, color: AppTheme.textSecondary, fontWeight: FontWeight.w500),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return ListView.separated(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      itemCount: recommended.length,
+      separatorBuilder: (context, index) => Divider(
+        color: const Color(0xFFE5E2DD).withValues(alpha: 0.5),
+        thickness: 1,
+        indent: 20,
+        endIndent: 20,
+      ),
+      itemBuilder: (context, index) {
+        final product = recommended[index];
+        final name = context.productName(product);
+        final category = context.productCategory(product);
+        final price = (product['price'] as num).toInt();
+        final alwaysAvailable = isAlwaysAvailableProduct(product);
+        final stockQty = (product['stock_qty'] as num?)?.toInt() ?? 0;
+        final isSoldOut = !alwaysAvailable && stockQty <= 0;
+
+        return ListTile(
+          contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+          leading: Hero(
+            tag: 'img_rec_${product["id"]}',
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: SizedBox(
+                width: 48,
+                height: 48,
+                child: _buildProductImageSmall(product),
+              ),
+            ),
+          ),
+          title: Text(
+            name,
+            style: GoogleFonts.poppins(
+              fontSize: 14,
+              fontWeight: FontWeight.bold,
+              color: isSoldOut ? AppTheme.textLight : AppTheme.textPrimary,
+              decoration: isSoldOut ? TextDecoration.lineThrough : null,
+            ),
+          ),
+          subtitle: Text(
+            "$category • ₹$price",
+            style: GoogleFonts.poppins(
+              fontSize: 12,
+              color: AppTheme.textSecondary,
+            ),
+          ),
+          trailing: isSoldOut
+              ? Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFECEB),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    context.t('soldOut'),
+                    style: GoogleFonts.poppins(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: const Color(0xFFC62828),
+                    ),
+                  ),
+                )
+              : GestureDetector(
+                  onTap: () {
+                    Haptics.light();
+                    SoundManager.instance.playClickSound();
+                    final productId = product['id'];
+                    ref.read(tapCountsProvider.notifier).updateState((state) {
+                      final newState = Map<dynamic, int>.from(state);
+                      newState[productId] = (state[productId] ?? 0) + 1;
+                      return newState;
+                    });
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: AppTheme.primary.withValues(alpha: 0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.add_rounded, color: AppTheme.primary, size: 20),
+                  ),
+                ),
+          onTap: () {
+            _searchController.text = name;
+            ref.read(searchProvider.notifier).val = name;
+            _searchFocusNode.unfocus();
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildProductImageSmall(Map<String, dynamic> product) {
+    final imageUrl = product["image_url"] as String?;
+    if (product["is_syncing"] == true && imageUrl != null) {
+      return Image.file(File(imageUrl), fit: BoxFit.cover);
+    }
+    if (imageUrl != null && imageUrl.startsWith('http')) {
+      return CachedNetworkImage(
+        imageUrl: imageUrl,
+        fit: BoxFit.cover,
+        placeholder: (context, url) => Container(
+          color: const Color(0xFFF1F3F5),
+          child: const Center(
+            child: SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(strokeWidth: 1.5, color: AppTheme.primary),
+            ),
+          ),
+        ),
+        errorWidget: (context, url, error) => _buildPlaceholderImageSmall(),
+      );
+    }
+    return _buildPlaceholderImageSmall();
+  }
+
+  Widget _buildPlaceholderImageSmall() {
+    return Container(
+      color: const Color(0xFFF1F3F5),
+      alignment: Alignment.center,
+      child: const Icon(Icons.image_not_supported_outlined, size: 20, color: Color(0xFFADB5BD)),
+    );
+  }
+
   Widget _buildPromoBanner() {
     final promoItems = [
       _timeSlotConfig(TimeSlot.morning),
       _timeSlotConfig(TimeSlot.evening),
     ];
+    final selectedTimeSlot = ref.watch(selectedTimeSlotProvider);
+    
+    final screenHeight = MediaQuery.of(context).size.height;
+    final screenWidth = MediaQuery.of(context).size.width;
+    
+    // Responsive height - made slightly taller to fit 2-line subtitle comfortably like in the reference image
+    final bannerHeight = (screenHeight * 0.17).clamp(135.0, 150.0);
+    // Card width - 82% of screen width so the second card is slightly visible on the right
+    final cardWidth = screenWidth * 0.82;
 
     return SizedBox(
-      height: 145,
-      child: PageView.builder(
-        controller: PageController(viewportFraction: 0.9),
+      height: bannerHeight,
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        physics: const BouncingScrollPhysics(),
+        padding: const EdgeInsets.only(left: 20, right: 8, top: 4, bottom: 8), // aligns perfectly with search and headers
         itemCount: promoItems.length,
         itemBuilder: (context, index) {
           final item = promoItems[index];
           final grad = item.gradient;
-          return GestureDetector(
-            onTap: () {
-              Haptics.light();
-              _openTimeSlotPage(item.slot);
-            },
-            child: Container(
-              clipBehavior: Clip.antiAlias,
-              margin: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: grad,
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
+          final isSelected = selectedTimeSlot == item.slot;
+          
+          // Dynamically add matching emoji for titles like in the reference image
+          final emoji = item.slot == TimeSlot.morning ? " 🌅" : " 🌇";
+          final displayTitle = "${item.title}$emoji";
+
+          return SizedBox(
+            width: cardWidth,
+            child: GestureDetector(
+              onTap: () {
+                Haptics.light();
+                SoundManager.instance.playClickSound();
+                // Toggle: tap again to deselect
+                if (isSelected) {
+                  ref.read(selectedTimeSlotProvider.notifier).val = null;
+                } else {
+                  ref.read(selectedTimeSlotProvider.notifier).val = item.slot;
+                }
+                ref.read(selectedCategoryProvider.notifier).val = "All";
+              },
+              onLongPress: () {
+                Haptics.medium();
+                _openTimeSlotPage(item.slot);
+              },
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 300),
+                curve: Curves.easeInOut,
+                clipBehavior: Clip.antiAlias,
+                margin: const EdgeInsets.only(right: 12, top: 4, bottom: 4), // right margin only for horizontal list
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: grad, // Original green/brown gradient is always visible
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(20), // Premium rounded corners matching reference image
+                  border: isSelected
+                      ? Border.all(color: const Color(0xFFE8C547), width: 2.2)
+                      : null,
+                  boxShadow: [
+                    BoxShadow(
+                      color: isSelected
+                          ? const Color(0xFFE8C547).withValues(alpha: 0.3)
+                          : grad[0].withValues(alpha: 0.25),
+                      blurRadius: isSelected ? 12 : 8,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
                 ),
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: [
-                  BoxShadow(
-                    color: grad[0].withValues(alpha: 0.3),
-                    blurRadius: 8,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-              ),
-              child: Stack(
-                children: [
-                  Positioned(
-                    right: -10,
-                    bottom: -10,
-                    child: Icon(
-                      item.icon,
-                      size: 110,
-                      color: Colors.white.withValues(alpha: 0.15),
+                child: Stack(
+                  children: [
+                    // Very light yellow overlay when selected to let background green show through
+                    if (isSelected)
+                      Positioned.fill(
+                        child: Container(
+                          color: const Color(0xFFFFF7C2).withValues(alpha: 0.18),
+                        ),
+                      ),
+                    Positioned(
+                      right: -10,
+                      bottom: -10,
+                      child: Icon(
+                        item.icon,
+                        size: bannerHeight * 0.75,
+                        color: Colors.white.withValues(alpha: 0.15),
+                      ),
                     ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    if (isSelected)
+                      Positioned(
+                        top: 12,
+                        right: 12,
+                        child: Container(
+                          width: 22,
+                          height: 22,
                           decoration: BoxDecoration(
-                            color: Colors.white24,
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Text(
-                            item.tag,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: 1.0,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          item.title,
-                          style: const TextStyle(
                             color: Colors.white,
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
+                            shape: BoxShape.circle,
+                            boxShadow: [
+                              BoxShadow(
+                                color: const Color(0xFFE8C547).withValues(alpha: 0.4),
+                                blurRadius: 4,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
                           ),
+                          child: const Icon(Icons.check_rounded, size: 14, color: Color(0xFFE8C547)),
                         ),
-                        const SizedBox(height: 2),
-                        Text(
-                          item.subtitle,
-                          style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.85),
-                            fontSize: 11,
-                          ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
+                      ),
+                    Padding(
+                      padding: const EdgeInsets.all(16.0), // Generous padding matching reference image
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerLeft,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: isSelected
+                                    ? const Color(0xFFFFF7C2).withValues(alpha: 0.35)
+                                    : Colors.white.withValues(alpha: 0.18),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                item.tag,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                  letterSpacing: 1.0,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              displayTitle,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            const SizedBox(height: 4),
+                            SizedBox(
+                              width: cardWidth - 44, // bounds subtitle text horizontally
+                              child: Text(
+                                item.subtitle,
+                                style: TextStyle(
+                                  color: Colors.white.withValues(alpha: 0.85),
+                                  fontSize: 12,
+                                  height: 1.3,
+                                ),
+                                maxLines: 2, // Wraps up to 2 lines exactly like the reference image
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
                         ),
-                      ],
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           );
@@ -955,7 +1241,8 @@ class _HomePageState extends ConsumerState<HomePage> {
     }
   }
 
-  Future<void> _openEditProductSheet(BuildContext context, Map<String, dynamic> product, List<String> categories) async {
+  Future<void> _openEditProductSheet(BuildContext context, Map<String, dynamic> product, List<String> categories, {TimeSlot? activeSlot}) async {
+    final slot = activeSlot ?? ref.read(selectedTimeSlotProvider);
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -963,8 +1250,9 @@ class _HomePageState extends ConsumerState<HomePage> {
       builder: (context) => EditProductSheet(
         product: product,
         categories: categories,
+        activeSlot: slot,
         onUpdate: (updates, newImagePath) => _updateProduct(product['id'], updates, newImagePath),
-        onDelete: () => _deleteProduct(product['id']),
+        onDelete: () => _deleteProduct(product['id'], slot),
       ),
     );
   }
@@ -997,7 +1285,7 @@ class _HomePageState extends ConsumerState<HomePage> {
           if (index != -1) newState[index] = Map<String, dynamic>.from(response);
           return newState;
         });
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.t('productUpdated'))));
+        showCelebration(context, context.t('productUpdated'));
       }
     } catch (e) {
       if (mounted) {
@@ -1006,34 +1294,72 @@ class _HomePageState extends ConsumerState<HomePage> {
     }
   }
 
-  Future<void> _deleteProduct(String id) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(context.t('deleteProduct')),
-        content: Text(context.t('deleteProductConfirm')),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: Text(context.t('cancel'))),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true), 
-            style: TextButton.styleFrom(foregroundColor: AppTheme.primary),
-            child: Text(context.t('delete'))
-          ),
-        ],
-      ),
-    );
+  Future<void> _deleteProduct(String id, TimeSlot? activeSlot) async {
+    if (activeSlot != null) {
+      final slotName = activeSlot == TimeSlot.morning ? "Morning" : "Evening";
+      final result = await showDialog<String>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text("Delete Options"),
+          content: Text("Choose how you want to delete this product:"),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, "slot"),
+              child: Text("Delete in $slotName"),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context, "everywhere"),
+              style: TextButton.styleFrom(foregroundColor: AppTheme.primary),
+              child: const Text("Delete Snack"),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context, "cancel"),
+              child: Text(context.t('cancel')),
+            ),
+          ],
+        ),
+      );
 
-    if (confirmed == true) {
-      try {
-        await Supabase.instance.client.from('products').update({'is_active': false}).eq('id', id);
-        if (mounted) {
-          ref.read(productsProvider.notifier).updateState((state) => state.where((p) => p['id'] != id).toList());
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.t('productDeleted'))));
-        }
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.t('deleteFailed', args: {'error': e}))));
-        }
+      if (result == "slot") {
+        final updates = {
+          'category': 'Other',
+          'category_i18n': {'en': 'Other'},
+        };
+        await _updateProduct(id, updates, null);
+        return;
+      } else if (result == "everywhere") {
+        // Continue to delete everywhere
+      } else {
+        return;
+      }
+    } else {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text(context.t('deleteProduct')),
+          content: Text(context.t('deleteProductConfirm')),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context, false), child: Text(context.t('cancel'))),
+            TextButton(
+              onPressed: () => Navigator.pop(context, true), 
+              style: TextButton.styleFrom(foregroundColor: AppTheme.primary),
+              child: Text(context.t('delete'))
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true) return;
+    }
+
+    try {
+      await Supabase.instance.client.from('products').update({'is_active': false}).eq('id', id);
+      if (mounted) {
+        ref.read(productsProvider.notifier).updateState((state) => state.where((p) => p['id'] != id).toList());
+        showCelebration(context, context.t('productDeleted'), icon: Icons.delete_rounded, bannerColor: const Color(0xFFD32F2F));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.t('deleteFailed', args: {'error': e}))));
       }
     }
   }
@@ -1839,18 +2165,26 @@ class EditProductSheet extends StatefulWidget {
   final List<String> categories;
   final Function(Map<String, dynamic> updates, String? newImagePath) onUpdate;
   final VoidCallback onDelete;
-  const EditProductSheet({super.key, required this.product, required this.categories, required this.onUpdate, required this.onDelete});
+  final TimeSlot? activeSlot;
+
+  const EditProductSheet({
+    super.key,
+    required this.product,
+    required this.categories,
+    required this.onUpdate,
+    required this.onDelete,
+    this.activeSlot,
+  });
+
   @override
   State<EditProductSheet> createState() => _EditProductSheetState();
 }
 
 class _EditProductSheetState extends State<EditProductSheet> {
   late TextEditingController _nameController;
-  late TextEditingController _nameTaController;
   late TextEditingController _priceController;
   late TextEditingController _stockController;
   late TextEditingController _otherCategoryController;
-  late TextEditingController _categoryTaController;
   late String _category;
   XFile? _selectedImage;
   final ImagePicker _picker = ImagePicker();
@@ -1859,16 +2193,10 @@ class _EditProductSheetState extends State<EditProductSheet> {
   void initState() { 
     super.initState(); 
     _nameController = TextEditingController(text: widget.product['name']);
-    _nameTaController = TextEditingController(
-      text: AppStrings.mapValue(widget.product['name_i18n'], 'ta') ?? '',
-    );
     _priceController = TextEditingController(text: widget.product['price'].toString());
     _stockController = TextEditingController(text: (widget.product['stock_qty'] ?? 0).toString());
     _category = widget.product['category'] ?? "Other";
     _otherCategoryController = TextEditingController();
-    _categoryTaController = TextEditingController(
-      text: AppStrings.mapValue(widget.product['category_i18n'], 'ta') ?? '',
-    );
     if (!widget.categories.contains(_category)) {
       _otherCategoryController.text = _category;
       _category = "Other";
@@ -1878,17 +2206,59 @@ class _EditProductSheetState extends State<EditProductSheet> {
   @override
   void dispose() { 
     _nameController.dispose(); 
-    _nameTaController.dispose();
     _priceController.dispose(); 
     _stockController.dispose();
     _otherCategoryController.dispose();
-    _categoryTaController.dispose();
     super.dispose(); 
   }
 
   Future<void> _pickImage() async {
     final image = await _picker.pickImage(source: ImageSource.gallery, imageQuality: 80);
     if (image != null && mounted) setState(() => _selectedImage = image);
+  }
+
+  void _showAddToSlotDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("Add to Time Slot"),
+        content: const Text("Select which slot you want to add this product to:"),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              final updates = {
+                ...widget.product,
+                'category': 'Morning Snacks',
+                'name_i18n': {'en': _nameController.text.trim()},
+                'category_i18n': {'en': 'Morning Snacks'},
+              };
+              widget.onUpdate(updates, null);
+              Navigator.pop(context); // Close the edit sheet
+            },
+            child: const Text("Morning"),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              final updates = {
+                ...widget.product,
+                'category': 'Evening Snacks',
+                'name_i18n': {'en': _nameController.text.trim()},
+                'category_i18n': {'en': 'Evening Snacks'},
+              };
+              widget.onUpdate(updates, null);
+              Navigator.pop(context); // Close the edit sheet
+            },
+            child: const Text("Evening"),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(context.t('cancel')),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -1906,12 +2276,22 @@ class _EditProductSheetState extends State<EditProductSheet> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(context.t('editProduct'), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
-                IconButton(
-                  icon: const Icon(Icons.delete_outline, color: AppTheme.primary),
-                  onPressed: () {
-                    Navigator.pop(context);
-                    widget.onDelete();
-                  },
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.add_circle_outline_rounded, color: AppTheme.primary),
+                      tooltip: "Add to slot",
+                      onPressed: () => _showAddToSlotDialog(context),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.delete_outline, color: AppTheme.primary),
+                      onPressed: () {
+                        Navigator.pop(context);
+                        widget.onDelete();
+                      },
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -1920,11 +2300,6 @@ class _EditProductSheetState extends State<EditProductSheet> {
               controller: _nameController,
               decoration: InputDecoration(labelText: context.t('productNameEnglish'), border: const OutlineInputBorder()),
               onChanged: (_) => setState(() {}),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _nameTaController,
-              decoration: InputDecoration(labelText: context.t('productNameTamil'), border: const OutlineInputBorder()),
             ),
             const SizedBox(height: 12),
             if (isAlwaysAvailable)
@@ -1957,16 +2332,6 @@ class _EditProductSheetState extends State<EditProductSheet> {
               ),
             ],
             const SizedBox(height: 12),
-            TextField(
-              controller: _categoryTaController,
-              decoration: InputDecoration(labelText: context.t('categoryTamil'), border: const OutlineInputBorder()),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              context.t('tamilOptional'),
-              style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
-            ),
-            const SizedBox(height: 12),
             SizedBox(width: double.infinity, child: OutlinedButton.icon(onPressed: _pickImage, icon: const Icon(Icons.photo_library_outlined), label: Text(_selectedImage == null ? context.t('changePhoto') : context.t('newPhotoSelected')))),
             const SizedBox(height: 16),
             SizedBox(width: double.infinity, child: ElevatedButton(style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primary, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 14)), onPressed: () {
@@ -1985,8 +2350,8 @@ class _EditProductSheetState extends State<EditProductSheet> {
                 'name': name,
                 'price': price,
                 'category': finalCategory,
-                'name_i18n': _buildI18nMap(en: name, ta: _nameTaController.text.trim()),
-                'category_i18n': _buildI18nMap(en: finalCategory, ta: _categoryTaController.text.trim()),
+                'name_i18n': {'en': name},
+                'category_i18n': {'en': finalCategory},
               };
               if (!alwaysAvailable) {
                 final stock = int.tryParse(_stockController.text.trim()) ?? 0;
@@ -1999,13 +2364,6 @@ class _EditProductSheetState extends State<EditProductSheet> {
         ),
       ),
     );
-  }
-
-  Map<String, String> _buildI18nMap({required String en, required String ta}) {
-    return {
-      'en': en,
-      if (ta.isNotEmpty) 'ta': ta,
-    };
   }
 }
 
