@@ -501,8 +501,7 @@ class _HomePageState extends ConsumerState<HomePage> {
     final isLoading = ref.watch(isLoadingProvider);
     final selectedCategory = ref.watch(selectedCategoryProvider);
     final searchQuery = ref.watch(searchProvider).toLowerCase();
-    final tapCounts = ref.watch(tapCountsProvider);
-    final selectedCount = tapCounts.values.fold<int>(0, (sum, count) => sum + count);
+    final hasItems = ref.watch(tapCountsProvider.select((map) => map.isNotEmpty));
     final selectedTimeSlot = ref.watch(selectedTimeSlotProvider);
 
     // Dynamic categories from products
@@ -673,7 +672,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                 ],
               ),
               _buildBottomNav(context),
-              if (selectedCount > 0)
+              if (hasItems)
                 Positioned(
                   bottom: 210,
                   right: 20,
@@ -2180,7 +2179,7 @@ class _ProductCardState extends ConsumerState<ProductCard> {
     final product = widget.product;
     final onEdit = widget.onEdit;
     final productId = product["id"];
-    final count = ref.watch(tapCountsProvider)[productId] ?? 0;
+    final count = ref.watch(tapCountsProvider.select((map) => map[productId] ?? 0));
 
     if (_qtyController.text != "$count") {
       _qtyController.text = count > 0 ? "$count" : "";
