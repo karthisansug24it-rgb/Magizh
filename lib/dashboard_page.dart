@@ -54,6 +54,8 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
   Future<void> _fetchData() async {
     setState(() => _isLoading = true);
     try {
+      await _deleteExpiredOrders();
+
       final response = await Supabase.instance.client
           .from('expense_transactions')
           .select('*')
@@ -74,6 +76,15 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
       debugPrint('DASHBOARD FETCH ERROR: $e');
       if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  Future<void> _deleteExpiredOrders() async {
+    final now = DateTime.now();
+    final cutoff = DateTime(now.year, now.month - 2, now.day);
+    await Supabase.instance.client
+        .from('expense_transactions')
+        .delete()
+        .lt('created_at', cutoff.toUtc().toIso8601String());
   }
 
   void _scrollToCurrentDay() {
@@ -190,7 +201,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
   Widget build(BuildContext context) {
     final localeName = Localizations.localeOf(context).toLanguageTag();
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: AppTheme.scaffoldBg,
       appBar: AppBar(
         title: Text(
           context.t('analyticsTitle'),
@@ -198,7 +209,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
           overflow: TextOverflow.ellipsis,
           style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.primary),
         ),
-        backgroundColor: Colors.white,
+        backgroundColor: AppTheme.scaffoldBg,
         elevation: 0,
         centerTitle: true,
         leading: IconButton(
@@ -223,10 +234,10 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _buildSalaryCard(),
-                  const SizedBox(height: 24),
+                  _buildMonthOverview(),
+                  const SizedBox(height: 16),
                   _buildDateSearch(),
-                  const SizedBox(height: 32),
+                  const SizedBox(height: 28),
                   
                   _buildSectionTitle(context.t('dailyOrdersThisMonth')),
                   const SizedBox(height: 16),
@@ -278,18 +289,57 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
     );
   }
 
-  Widget _buildSalaryCard() {
+  Widget _buildMonthOverview() {
     final monthName = DateFormat('MMMM', Localizations.localeOf(context).toLanguageTag()).format(DateTime.now());
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          context.t('monthOverview', args: {'month': monthName}),
+          style: GoogleFonts.poppins(fontSize: 24, fontWeight: FontWeight.w800, color: AppTheme.primary),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          context.t('analyticsWindow'),
+          style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.textSecondary),
+        ),
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            Expanded(
+              child: _buildOverviewMetric(
+                context.t('totalEarned'),
+                "₹${_monthlyRevenue.toInt()}",
+                context.t('monthTracker', args: {'month': monthName}),
+                Icons.payments_outlined,
+                AppTheme.primary,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _buildOverviewMetric(
+                context.t('ordersThisMonth'),
+                _monthlyOrders.toString(),
+                context.t('totalOrders', args: {'count': _monthlyOrders}),
+                Icons.shopping_bag_outlined,
+                AppTheme.primaryLight,
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildOverviewMetric(String label, String value, String caption, IconData icon, Color accent) {
     return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(24),
+      constraints: const BoxConstraints(minHeight: 170),
+      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(color: Colors.white.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 4))
-        ],
-        border: Border.all(color: AppTheme.primary.withValues(alpha: 0.1)),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppTheme.primary.withValues(alpha: 0.08)),
+        boxShadow: AppTheme.softShadow,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -297,75 +347,35 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
           Row(
             children: [
               Container(
-                padding: const EdgeInsets.all(10),
+                padding: const EdgeInsets.all(9),
                 decoration: BoxDecoration(
-                  color: AppTheme.primary.withValues(alpha: 0.1),
-                  shape: BoxShape.circle,
+                  color: accent.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(8),
                 ),
-                child: const Icon(Icons.account_balance_wallet, color: AppTheme.primary, size: 28),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(context.t('currentMonthSalary'), style: TextStyle(fontSize: 14, color: AppTheme.primary.withValues(alpha: 0.7), fontWeight: FontWeight.w600)),
-                    Text(context.t('monthTracker', args: {'month': monthName}), style: TextStyle(fontSize: 12, color: AppTheme.primary.withValues(alpha: 0.6))),
-                  ],
-                ),
+                child: Icon(icon, color: AppTheme.primary, size: 22),
               ),
             ],
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 28),
           Text(
-            "₹${_monthlyRevenue.toInt()}",
-            style: const TextStyle(fontSize: 42, fontWeight: FontWeight.w900, color: AppTheme.primary, letterSpacing: -1),
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700, color: AppTheme.textSecondary),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: GoogleFonts.inter(fontSize: 32, fontWeight: FontWeight.w900, color: AppTheme.primary),
           ),
           const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color: Colors.green.shade50,
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 180),
-                  child: Text(
-                    context.t('totalOrders', args: {'count': _monthlyOrders}),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(color: Colors.green.shade700, fontWeight: FontWeight.bold, fontSize: 12),
-                  ),
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color: AppTheme.primary.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.trending_up, color: AppTheme.primary, size: 14),
-                    const SizedBox(width: 4),
-                    ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 120),
-                      child: Text(
-                        context.t('growth'),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(color: AppTheme.primary, fontWeight: FontWeight.bold, fontSize: 12),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
+          Text(
+            caption,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.textLight),
           )
         ],
       ),
@@ -378,10 +388,9 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(color: Colors.white.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 4))
-        ],
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppTheme.primary.withValues(alpha: 0.08)),
+        boxShadow: AppTheme.softShadow,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -478,10 +487,9 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(28),
-        boxShadow: [
-          BoxShadow(color: Colors.white.withValues(alpha: 0.03), blurRadius: 30, offset: const Offset(0, 10))
-        ],
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppTheme.primary.withValues(alpha: 0.08)),
+        boxShadow: AppTheme.softShadow,
       ),
       child: Column(
         children: [
@@ -542,7 +550,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
               ),
             )
           else
-            SizedBox(height: 300, child: chart),
+            SizedBox(height: 240, child: chart),
         ],
       ),
     );
@@ -610,7 +618,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
           drawVerticalLine: false,
           horizontalInterval: maxY > 10 ? 5 : 2,
           getDrawingHorizontalLine: (value) {
-            return FlLine(color: Colors.white.withValues(alpha: 0.03), strokeWidth: 1);
+            return FlLine(color: AppTheme.primary.withValues(alpha: 0.06), strokeWidth: 1);
           },
         ),
         extraLinesData: ExtraLinesData(
@@ -639,22 +647,13 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
             barRods: [
               BarChartRodData(
                 toY: (_daysInMonthSales[day] ?? 0).toDouble(),
-                gradient: LinearGradient(
-                  colors: isTouched 
-                    ? [AppTheme.primary, const Color(0xFFE53935)] 
-                    : [
-                        _getRainbowColor(i).withValues(alpha: 0.8),
-                        _getRainbowColor(i).withValues(alpha: 0.4),
-                      ],
-                  begin: Alignment.bottomCenter,
-                  end: Alignment.topCenter,
-                ),
+                color: isTouched ? AppTheme.primary : AppTheme.primaryLight.withValues(alpha: 0.45),
                 width: isTouched ? 32 : 28,
                 borderRadius: BorderRadius.circular(6),
                 backDrawRodData: BackgroundBarChartRodData(
                   show: true,
                   toY: maxY,
-                  color: Colors.white.withValues(alpha: 0.01),
+                  color: AppTheme.primary.withValues(alpha: 0.04),
                 ),
               ),
             ],
@@ -674,13 +673,18 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
 
     final localeName = Localizations.localeOf(context).toLanguageTag();
 
-    return LineChart(
-      LineChartData(
-        gridData: FlGridData(
-          show: true,
-          drawVerticalLine: false,
-          horizontalInterval: maxY / 5,
-          getDrawingHorizontalLine: (value) => FlLine(color: Colors.white.withValues(alpha: 0.03), strokeWidth: 1),
+    return BarChart(
+      BarChartData(
+        alignment: BarChartAlignment.spaceAround,
+        maxY: maxY,
+        barTouchData: BarTouchData(
+          touchCallback: (FlTouchEvent event, barTouchResponse) {
+            if (barTouchResponse != null && barTouchResponse.spot != null) {
+              setState(() => _touchedYearlyIndex = barTouchResponse.spot!.touchedBarGroupIndex);
+            }
+          },
+          enabled: true,
+          handleBuiltInTouches: false,
         ),
         titlesData: FlTitlesData(
           bottomTitles: AxisTitles(
@@ -711,77 +715,33 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
           topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
           rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
         ),
-        borderData: FlBorderData(show: false),
-        lineTouchData: LineTouchData(
-          touchCallback: (event, response) {
-            if (response != null && response.lineBarSpots != null && response.lineBarSpots!.isNotEmpty) {
-              setState(() => _touchedYearlyIndex = response.lineBarSpots!.first.x.toInt() - 1);
-            }
-          },
-          handleBuiltInTouches: true,
-          getTouchedSpotIndicator: (LineChartBarData barData, List<int> spotIndexes) {
-            return spotIndexes.map((spotIndex) {
-              return TouchedSpotIndicatorData(
-                FlLine(color: AppTheme.primary.withValues(alpha: 0.15), strokeWidth: 3),
-                FlDotData(
-                  getDotPainter: (spot, percent, bar, index) => FlDotCirclePainter(
-                    radius: 8,
-                    color: AppTheme.primary,
-                    strokeWidth: 3,
-                    strokeColor: Colors.white,
-                  ),
-                ),
-              );
-            }).toList();
-          },
-          touchTooltipData: LineTouchTooltipData(
-            getTooltipColor: (spot) => Colors.transparent,
-            getTooltipItems: (spots) => [],
-          ),
+        gridData: FlGridData(
+          show: true,
+          drawVerticalLine: false,
+          horizontalInterval: maxY / 5,
+          getDrawingHorizontalLine: (value) => FlLine(color: AppTheme.primary.withValues(alpha: 0.06), strokeWidth: 1),
         ),
-        lineBarsData: [
-          LineChartBarData(
-            spots: List.generate(12, (i) => FlSpot(i + 1.0, (_monthsInYearSales[i + 1] ?? 0).toDouble())),
-            isCurved: true,
-            gradient: const LinearGradient(
-              colors: [
-                Colors.purple,
-                Colors.indigo,
-                Colors.blue,
-                Colors.green,
-                Colors.yellow,
-                Colors.orange,
-                Colors.red,
-              ],
-            ),
-            barWidth: 4,
-            isStrokeCapRound: true,
-            dotData: FlDotData(
-              show: true,
-              getDotPainter: (spot, percent, bar, index) => FlDotCirclePainter(
-                radius: index == _touchedYearlyIndex ? 6 : 0,
-                color: Colors.white,
-                strokeWidth: 3,
-                strokeColor: _getRainbowColor(index),
+        borderData: FlBorderData(show: false),
+        barGroups: List.generate(12, (i) {
+          final month = i + 1;
+          final isTouched = i == _touchedYearlyIndex;
+          return BarChartGroupData(
+            x: month,
+            barRods: [
+              BarChartRodData(
+                toY: (_monthsInYearSales[month] ?? 0).toDouble(),
+                color: isTouched ? AppTheme.primary : AppTheme.primaryLight.withValues(alpha: 0.55),
+                width: isTouched ? 30 : 24,
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(6)),
+                backDrawRodData: BackgroundBarChartRodData(
+                  show: true,
+                  toY: maxY,
+                  color: AppTheme.primary.withValues(alpha: 0.04),
+                ),
               ),
-            ),
-            belowBarData: BarAreaData(
-              show: true,
-              gradient: LinearGradient(
-                colors: [
-                  Colors.purple.withValues(alpha: 0.3),
-                  Colors.blue.withValues(alpha: 0.3),
-                  Colors.green.withValues(alpha: 0.3),
-                  Colors.orange.withValues(alpha: 0.3),
-                  Colors.red.withValues(alpha: 0.0),
-                ],
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-              ),
-            ),
-          ),
-        ],
-        maxY: maxY,
+            ],
+          );
+        }),
       ),
     );
   }
@@ -852,7 +812,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
           drawVerticalLine: false,
           horizontalInterval: maxY > 100 ? 100 : (maxY > 20 ? 10 : 5),
           getDrawingHorizontalLine: (value) {
-            return FlLine(color: Colors.white.withValues(alpha: 0.03), strokeWidth: 1);
+            return FlLine(color: AppTheme.primary.withValues(alpha: 0.06), strokeWidth: 1);
           },
         ),
         extraLinesData: ExtraLinesData(
@@ -881,22 +841,13 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
             barRods: [
               BarChartRodData(
                 toY: (_daysOfWeekSales[day] ?? 0).toDouble(),
-                gradient: LinearGradient(
-                  colors: isTouched 
-                    ? [AppTheme.primary, const Color(0xFFE53935)] 
-                    : [
-                        _getWeeklyColor(i).withValues(alpha: 0.8),
-                        _getWeeklyColor(i).withValues(alpha: 0.4),
-                      ],
-                  begin: Alignment.bottomCenter,
-                  end: Alignment.topCenter,
-                ),
+                color: isTouched ? AppTheme.primary : AppTheme.primaryLight.withValues(alpha: 0.45),
                 width: isTouched ? 28 : 22,
                 borderRadius: const BorderRadius.vertical(top: Radius.circular(6)),
                 backDrawRodData: BackgroundBarChartRodData(
                   show: true,
                   toY: maxY,
-                  color: Colors.white.withValues(alpha: 0.01),
+                  color: AppTheme.primary.withValues(alpha: 0.04),
                 ),
               ),
             ],
@@ -904,31 +855,6 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
         }),
       ),
     );
-  }
-  Color _getRainbowColor(int index) {
-    const colors = [
-      Colors.red,
-      Colors.orange,
-      Colors.amber,
-      Colors.green,
-      Colors.blue,
-      Colors.indigo,
-      Colors.purple,
-    ];
-    return colors[index % colors.length];
-  }
-
-  Color _getWeeklyColor(int index) {
-    const colors = [
-      Color(0xFFE53935), // Mon - Red
-      Color(0xFFFB8C00), // Tue - Orange
-      Color(0xFFFDD835), // Wed - Yellow
-      Color(0xFF43A047), // Thu - Green
-      Color(0xFF1E88E5), // Fri - Blue
-      Color(0xFF5E35B1), // Sat - Deep Purple
-      Color(0xFF8E24AA), // Sun - Purple
-    ];
-    return colors[index % colors.length];
   }
 }
 

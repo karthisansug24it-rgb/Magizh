@@ -35,7 +35,7 @@ Future<void> main() async {
     throw StateError('Missing Supabase config.');
   }
 
-  await Supabase.initialize(url: supabaseUrl, anonKey: supabaseAnonKey);
+  await Supabase.initialize(url: supabaseUrl, publishableKey: supabaseAnonKey);
   await SoundManager.instance.init();
 
   runApp(const ProviderScope(child: MagizhPosApp()));
